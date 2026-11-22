@@ -57,8 +57,8 @@ export const PATROLS = [
 
 // Wall cameras: mounted on a wall, sweeping a cone.
 export const CAMERAS = [
-  { x: 640, y: 70, baseAngle: Math.PI / 2, label: 'CAM 1' },
-  { x: 1272, y: 380, baseAngle: Math.PI, label: 'CAM 2' },
+  { x: 640, y: 70, baseAngle: Math.PI / 2, label: 'EYE 1' },
+  { x: 1272, y: 380, baseAngle: Math.PI, label: 'EYE 2' },
 ];
 
 // The getaway door. It opens only once the loot target is met.

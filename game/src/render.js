@@ -1,7 +1,9 @@
-// The Midnight Vault — everything the eye sees, lamplight-noir edition.
-// One grand gallery at night, lit by warm lamps: gold pools of lamplight are
-// where you are seen, deep shadow is where you vanish, and loot glints warm
-// in the light. No labels say "hidden" — the light itself says it.
+// The Midnight Vault — everything the eye sees, ink-and-lamp edition.
+// One grand gallery at night, drawn like a thief's floor plan: warm plank
+// floors and slate-brick walls, gold pools of lamplight where you are seen,
+// hatched shadow pools where you vanish, glowing danger cones, glass cases
+// with treasure visible inside, and ink margin notes that say what the
+// light means. Safe, danger, hidden and noise must read at a glance.
 import { VIEW, HUD_H, COLORS, ALARM, LOOT_TARGET, TOOLS } from './config.js';
 import {
   WALLS, COVER, PILLARS, SHADOWS, CAMERAS, EXIT, ENTRANCE, PATROLS, inShadow,
@@ -41,31 +43,42 @@ function drawCone(ctx, x, y, facing, range, halfAngle, fill) {
 }
 
 function drawFloor(ctx) {
-  // Near-black warm floor: dark plum-brown, not navy. Faint large tiles.
-  ctx.fillStyle = '#171019';
+  // Warm ink-and-plank floor: dark walnut boards with visible seams and
+  // grain, not flat dark tiles. The floor itself carries the lamplight.
+  ctx.fillStyle = '#241811';
   ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
-  const tile = 80;
-  for (let y = HUD_H; y < VIEW.height; y += tile) {
-    for (let x = 0; x < VIEW.width; x += tile) {
-      if (((x / tile) + (y / tile)) % 2 === 0) {
-        ctx.fillStyle = '#1b141d';
-        ctx.fillRect(x, y, tile, tile);
-      }
+  const plankH = 52;
+  for (let y = HUD_H, row = 0; y < VIEW.height; y += plankH, row += 1) {
+    // Per-plank tone, deterministic from the row.
+    ctx.fillStyle = ['#2a1d13', '#2e2015', '#261a11'][row % 3];
+    ctx.fillRect(0, y, VIEW.width, plankH);
+    // Seams between planks.
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, y, VIEW.width, 2);
+    // Staggered butt joints.
+    const off = (row % 2) * 320;
+    ctx.fillRect((off + 200) % VIEW.width, y, 2, plankH);
+    ctx.fillRect((off + 760) % VIEW.width, y, 2, plankH);
+    // Grain: faint darker streaks, deterministic from row and streak.
+    ctx.strokeStyle = 'rgba(0,0,0,0.20)';
+    ctx.lineWidth = 1;
+    for (let k = 0; k < 5; k += 1) {
+      const gx = ((row * 173 + k * 271) % 1200) + 40;
+      const gy = y + 8 + ((row * 29 + k * 13) % (plankH - 16));
+      const gl = 60 + ((row * 11 + k * 47) % 140);
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(Math.min(VIEW.width - 4, gx + gl), gy + ((k % 3) - 1) * 2);
+      ctx.stroke();
     }
+    // A knot or two, darker rings on the board.
+    const kx = ((row * 389 + 500) % 1100) + 60;
+    const ky = y + plankH / 2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(kx, ky, 9, 5, 0, 0, Math.PI * 2);
+    ctx.stroke();
   }
-  // Thin warm grout lines, barely there.
-  ctx.strokeStyle = 'rgba(255,190,110,0.045)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = 0; x <= VIEW.width; x += tile) {
-    ctx.moveTo(x, HUD_H);
-    ctx.lineTo(x, VIEW.height);
-  }
-  for (let y = HUD_H; y <= VIEW.height; y += tile) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(VIEW.width, y);
-  }
-  ctx.stroke();
 }
 
 // Dotted patrol routes on the floor: each guard's beat, drawn so the player
@@ -116,16 +129,31 @@ function drawLampPools(ctx) {
   }
 }
 
-// Shadow pools: pools of near-black with a soft feathered edge and a faint
-// cool rim, so the eye reads "dark you can stand in" without any text.
+// Shadow pools: hatched safe zones — diagonal ink hatching over a dark
+// pool with a soft feathered edge and a faint cool rim, so the eye reads
+// "dark you can stand in" at a glance, with no text at all.
 function drawShadows(ctx) {
   for (const s of SHADOWS) {
     ctx.save();
     ctx.shadowColor = 'rgba(2,3,8,0.9)';
     ctx.shadowBlur = 22;
-    ctx.fillStyle = 'rgba(3,4,10,0.88)';
+    ctx.fillStyle = 'rgba(6,8,20,0.86)';
     roundRect(ctx, s.x, s.y, s.w, s.h, 20);
     ctx.fill();
+    ctx.restore();
+    // Diagonal ink hatching, clipped to the pool — the benchmark's signature
+    // for "safe": a texture, not a black hole.
+    ctx.save();
+    roundRect(ctx, s.x, s.y, s.w, s.h, 20);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(150,180,255,0.17)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let d = -s.h; d < s.w + s.h; d += 12) {
+      ctx.moveTo(s.x + d, s.y + s.h);
+      ctx.lineTo(s.x + d + s.h, s.y);
+    }
+    ctx.stroke();
     ctx.restore();
     ctx.strokeStyle = 'rgba(140,165,255,0.14)';
     ctx.lineWidth = 1.5;
@@ -143,43 +171,115 @@ function drawShadows(ctx) {
 
 function drawWallsAndCover(ctx) {
   for (const w of WALLS) {
-    ctx.fillStyle = '#2c1f2e';
+    // Slate-blue brick, like the benchmark's walls: dark courses with
+    // mortar lines and a slight per-course tone shift, deterministic.
+    ctx.fillStyle = '#262c40';
     ctx.fillRect(w.x, w.y, w.w, w.h);
+    const course = 14;
+    for (let y = w.y + course, row = 0; y < w.y + w.h; y += course, row += 1) {
+      ctx.fillStyle = row % 2 === 0 ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.18)';
+      ctx.fillRect(w.x, y, w.w, 1.5);
+    }
+    // Vertical joints, staggered per course, on the long wall.
+    if (w.w > w.h) {
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      for (let x = w.x + 46; x < w.x + w.w; x += 92) ctx.fillRect(x, w.y, 1.5, w.h);
+    }
     // Brass trim along the top edge, catching the lamplight.
     ctx.fillStyle = '#7a5c2e';
     ctx.fillRect(w.x, w.y, w.w, 4);
     ctx.fillStyle = 'rgba(255,200,110,0.25)';
     ctx.fillRect(w.x, w.y, w.w, 1.5);
   }
-  for (const c of COVER) {
-    // Tall display case, a second cover layer distinct from the flat shadow
-    // pools: a plinth shadow on the floor, a raised lid catching the light,
-    // brass corner posts, and a warm glass glint — furniture you hide behind.
+  COVER.forEach((c, i) => {
+    // A display case you hide behind — but glass, not a black box: a
+    // wooden frame, and a colourful treasure visible inside the glass,
+    // so the furniture reads as furniture at a glance.
     ctx.fillStyle = 'rgba(0,0,0,0.38)';
     roundRect(ctx, c.x + 5, c.y + 7, c.w, c.h, 6);
     ctx.fill();
-    // Raised lid: a lighter top band, as if the case stands taller than the floor.
-    ctx.fillStyle = '#3a2b22';
-    roundRect(ctx, c.x, c.y, c.w, 14, 6);
+    if (c.label === 'velvet sofa') {
+      // A velvet chaise: deep burgundy cushions, brass studs, a jewel
+      // left on the seat.
+      ctx.fillStyle = '#4a1f2a';
+      roundRect(ctx, c.x, c.y, c.w, c.h, 6);
+      ctx.fill();
+      ctx.fillStyle = '#5d2836';
+      roundRect(ctx, c.x + 6, c.y + 6, c.w - 12, 14, 5);
+      ctx.fill();
+      ctx.fillStyle = '#c9a24a';
+      for (let sx = c.x + 12; sx < c.x + c.w - 8; sx += 16) {
+        ctx.beginPath();
+        ctx.arc(sx, c.y + c.h - 8, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#8fe9ff';
+      ctx.save();
+      ctx.translate(c.x + c.w / 2, c.y + c.h / 2 + 4);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-6, -6, 12, 12);
+      ctx.restore();
+      ctx.strokeStyle = '#8a6a2a';
+      ctx.lineWidth = 2;
+      roundRect(ctx, c.x, c.y, c.w, c.h, 6);
+      ctx.stroke();
+      return;
+    }
+    // Wooden frame.
+    ctx.fillStyle = '#3a2a18';
+    roundRect(ctx, c.x, c.y, c.w, c.h, 6);
     ctx.fill();
-    ctx.fillStyle = '#241a16';
-    roundRect(ctx, c.x, c.y + 10, c.w, c.h - 10, 6);
+    // Glass: dark teal, with a treasure inside — a jewel, a vase, or a
+    // scroll, picked deterministically by the case.
+    ctx.fillStyle = '#16242c';
+    roundRect(ctx, c.x + 6, c.y + 6, c.w - 12, c.h - 12, 4);
     ctx.fill();
+    const cx = c.x + c.w / 2;
+    const cy = c.y + c.h / 2 + 2;
+    const kind = i % 3;
+    if (kind === 0) {
+      // A sapphire in a gilt mount.
+      ctx.fillStyle = '#7fb8ff';
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-8, -8, 16, 16);
+      ctx.restore();
+      ctx.fillStyle = '#dfeeff';
+      ctx.beginPath();
+      ctx.arc(cx - 3, cy - 3, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (kind === 1) {
+      // A small porcelain vase.
+      ctx.fillStyle = '#c8d8e8';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 2, 9, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#8fa8c0';
+      ctx.fillRect(cx - 4, cy - 16, 8, 6);
+      ctx.fillStyle = '#e8b34a';
+      ctx.fillRect(cx - 9, cy + 8, 18, 3);
+    } else {
+      // A rolled scroll, tied with gold cord.
+      ctx.fillStyle = '#e8dcc0';
+      roundRect(ctx, cx - 14, cy - 7, 28, 14, 7);
+      ctx.fill();
+      ctx.fillStyle = '#c9a24a';
+      ctx.fillRect(cx - 3, cy - 7, 3, 14);
+      ctx.fillRect(cx + 3, cy - 7, 3, 14);
+    }
     ctx.strokeStyle = '#8a6a2a';
     ctx.lineWidth = 2;
     roundRect(ctx, c.x, c.y, c.w, c.h, 6);
     ctx.stroke();
-    // Brass corner posts at the front edge.
-    ctx.fillStyle = '#c9a24a';
-    ctx.fillRect(c.x + 2, c.y + 2, 4, c.h - 4);
-    ctx.fillRect(c.x + c.w - 6, c.y + 2, 4, c.h - 4);
-    ctx.strokeStyle = 'rgba(255,205,120,0.35)';
+    // Warm glass glint.
+    ctx.strokeStyle = 'rgba(255,205,120,0.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(c.x + 10, c.y + c.h - 8);
-    ctx.lineTo(c.x + c.w - 26, c.y + 8);
+    ctx.moveTo(c.x + 12, c.y + c.h - 10);
+    ctx.lineTo(c.x + c.w - 28, c.y + 10);
     ctx.stroke();
-  }
+  });
   for (const p of PILLARS) {
     ctx.fillStyle = '#241c2b';
     ctx.beginPath();
@@ -336,23 +436,48 @@ function drawExit(ctx, state) {
   }
 }
 
-// Vision cones, two layers: a soft wash plus a hotter core, so the sweep
-// reads as danger even shrunk to a thumbnail. Guards are red, cameras amber.
+// Vision cones as glowing danger pools: a radial gradient — hot near the
+// watcher, fading to the far edge — plus a bright rim, so the sweep reads
+// as light, not flat paint, even shrunk to a thumbnail. Guards are red,
+// cameras amber.
+function coneFill(ctx, x, y, range, hot, mid) {
+  const g = ctx.createRadialGradient(x, y, 8, x, y, range);
+  g.addColorStop(0, hot);
+  g.addColorStop(0.55, mid);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  return g;
+}
+
 function drawCones(ctx, state) {
   for (const cam of state.cameras) {
     if (state.time < cam.disabledUntil) continue;
-    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range, CAMERA.halfAngle, 'rgba(255,186,64,0.16)');
-    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range * 0.8, CAMERA.halfAngle * 0.7, 'rgba(255,196,90,0.20)');
+    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range, CAMERA.halfAngle,
+      coneFill(ctx, cam.x, cam.y, CAMERA.range, 'rgba(255,196,90,0.34)', 'rgba(255,176,32,0.16)'));
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,196,90,0.38)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cam.x, cam.y, CAMERA.range, cam.angle - CAMERA.halfAngle, cam.angle + CAMERA.halfAngle);
+    ctx.stroke();
+    ctx.restore();
   }
   for (const g of state.guards) {
     const hot = g.alert > 0.3;
     const investigating = !!g.investigate;
-    const outer = investigating ? 'rgba(242,163,60,0.24)'
-      : hot ? 'rgba(229,72,77,0.26)' : 'rgba(229,72,77,0.18)';
-    const inner = investigating ? 'rgba(242,163,60,0.30)'
-      : hot ? 'rgba(229,72,77,0.34)' : 'rgba(229,72,77,0.24)';
-    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange, GUARD.coneHalfAngle, outer);
-    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange * 0.8, GUARD.coneHalfAngle * 0.65, inner);
+    const outer = investigating ? ['rgba(242,163,60,0.42)', 'rgba(242,163,60,0.20)']
+      : hot ? ['rgba(229,72,77,0.46)', 'rgba(229,72,77,0.22)']
+        : ['rgba(229,72,77,0.36)', 'rgba(229,72,77,0.16)'];
+    const rim = investigating ? 'rgba(242,163,60,0.5)'
+      : hot ? 'rgba(255,90,80,0.55)' : 'rgba(255,90,80,0.4)';
+    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange, GUARD.coneHalfAngle,
+      coneFill(ctx, g.x, g.y, GUARD.coneRange, outer[0], outer[1]));
+    ctx.save();
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, GUARD.coneRange, g.facing - GUARD.coneHalfAngle, g.facing + GUARD.coneHalfAngle);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -377,15 +502,15 @@ function drawCameras(ctx, state) {
     ctx.fillStyle = disabled ? '#8a90a8' : '#f4efe4';
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(disabled ? 'CAM OFF' : cam.label, Math.max(30, Math.min(1250, cam.x)), cam.y + 28);
+    ctx.fillText(disabled ? 'EYE OFF' : cam.label, Math.max(30, Math.min(1250, cam.x)), cam.y + 28);
   }
 }
 
 function drawGuards(ctx, state) {
   for (const g of state.guards) {
-    // Each guard carries a lantern: a small warm pool that marks him in the dark.
-    const lg = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, 46);
-    lg.addColorStop(0, 'rgba(255,178,72,0.20)');
+    // Each guard carries a lantern: a warm pool that marks him in the dark.
+    const lg = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, 52);
+    lg.addColorStop(0, 'rgba(255,178,72,0.28)');
     lg.addColorStop(1, 'rgba(255,178,72,0)');
     ctx.fillStyle = lg;
     ctx.beginPath();
@@ -431,27 +556,39 @@ function drawThief(ctx, state) {
   const hidden = inShadow(t.x, t.y);
   ctx.save();
   ctx.translate(t.x, t.y);
-  // In lamplight the cloak is teal with a pale face and a gold clasp; in
-  // shadow the whole figure sinks to near-black — the light says "hidden".
+  // A hooded figure, not a triangle: a cloak that flares at the base, a
+  // hood with a shadowed face, a satchel at the hip and a gold clasp —
+  // a character the eye finds in one frame, at any size.
   ctx.fillStyle = hidden ? '#0a0f14' : '#123f38';
   ctx.beginPath();
   ctx.moveTo(0, -15);
-  ctx.lineTo(12, 10);
-  ctx.lineTo(-12, 10);
+  ctx.quadraticCurveTo(10, -8, 13, 8);
+  ctx.quadraticCurveTo(6, 13, 0, 13);
+  ctx.quadraticCurveTo(-6, 13, -13, 8);
+  ctx.quadraticCurveTo(-10, -8, 0, -15);
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = hidden ? '#1c2b33' : '#1f7a6d';
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.fillStyle = hidden ? '#3a4550' : '#f4efe4';
+  // Hood: a darker cowl over the face, two eye glints in the lamplight.
+  ctx.fillStyle = hidden ? '#05070a' : '#0c2a25';
   ctx.beginPath();
-  ctx.arc(0, -4, 6, 0, Math.PI * 2);
+  ctx.arc(0, -6, 6.5, 0, Math.PI * 2);
   ctx.fill();
   if (!hidden) {
+    ctx.fillStyle = '#f4efe4';
+    ctx.beginPath();
+    ctx.arc(-2.2, -6, 1.1, 0, Math.PI * 2);
+    ctx.arc(2.2, -6, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+    // Gold clasp at the throat, and the satchel at the hip.
     ctx.fillStyle = COLORS.gold;
     ctx.beginPath();
-    ctx.arc(0, 8, 2.5, 0, Math.PI * 2);
+    ctx.arc(0, 4, 2.2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#6a4a1e';
+    ctx.fillRect(8, 2, 6, 8);
   }
   ctx.restore();
   // Visibility badge over the thief: what the light says about him right
@@ -519,15 +656,21 @@ function drawSmoke(ctx, state) {
 }
 
 function drawHud(ctx, state) {
-  ctx.fillStyle = '#0d0a14';
+  // Ink-and-parchment bar: warm dark ink with a brass rule underneath, and
+  // the job named like the benchmark's — a job, not a menu.
+  ctx.fillStyle = '#171019';
   ctx.fillRect(0, 0, VIEW.width, HUD_H);
+  ctx.fillStyle = '#7a5c2e';
+  ctx.fillRect(0, HUD_H - 3, VIEW.width, 3);
+  ctx.fillStyle = 'rgba(255,200,110,0.35)';
+  ctx.fillRect(0, HUD_H - 3, VIEW.width, 1);
   ctx.fillStyle = COLORS.gold;
   ctx.font = 'bold 22px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('THE MIDNIGHT VAULT', 18, 28);
   ctx.fillStyle = COLORS.muted;
   ctx.font = '12px sans-serif';
-  ctx.fillText('grab the loot · dodge the cones · slip out the exit', 18, 50);
+  ctx.fillText('JOB 1 · THE STARLIGHT VAULT', 18, 50);
 
   // Loot tally.
   ctx.fillStyle = COLORS.text;
@@ -553,7 +696,7 @@ function drawHud(ctx, state) {
   if (state.seen) {
     ctx.fillStyle = COLORS.danger;
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(state.seenBy === 'guard' ? 'SPOTTED BY GUARD!' : 'ON CAMERA!', ax + 210, 46);
+    ctx.fillText(state.seenBy === 'guard' ? 'SPOTTED BY A WARDEN!' : 'ON CAMERA!', ax + 210, 46);
   }
 
   // Tools.
@@ -621,11 +764,50 @@ function drawOverlay(ctx, title, lines, accent) {
   lines.forEach((line, i) => ctx.fillText(line, VIEW.width / 2, 310 + i * 34));
 }
 
+// Ink margin notes on the floor plan — the thief's own field notes, in the
+// benchmark's language: what the light means, written where it matters.
+// Static floor ink, part of the game, not a screenshot prop.
+function drawInkNotes(ctx) {
+  ctx.save();
+  ctx.font = 'italic 12px Georgia, serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(232,220,192,0.72)';
+  ctx.fillText('blind spot — safe in the dark', 118, 350);
+  ctx.fillText('lamplight — seen from afar', 700, 548);
+  ctx.restore();
+}
+
+// When a warden walks off to look at the tossed coin, say so on a
+// parchment tag above him — the benchmark's "? HEARD THE PEBBLE" beat,
+// in our own words. Drawn only while a guard is actually investigating.
+function drawInvestigateTag(ctx, state) {
+  for (const g of state.guards) {
+    if (!g.investigate) continue;
+    const text = 'HEARD THE COIN — off to look';
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    const w = ctx.measureText(text).width + 18;
+    const bx = g.x - w / 2;
+    const by = g.y - GUARD.radius - 30;
+    ctx.fillStyle = 'rgba(232,220,192,0.94)';
+    roundRect(ctx, bx, by, w, 18, 5);
+    ctx.fill();
+    ctx.strokeStyle = '#7a5c2e';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#2a2118';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, g.x, by + 12.5);
+    ctx.restore();
+  }
+}
+
 export function render(ctx, state) {
   drawFloor(ctx);
   drawLampPools(ctx);
   drawShadows(ctx);
   drawPatrols(ctx);
+  drawInkNotes(ctx);
   drawWallsAndCover(ctx);
   drawExit(ctx, state);
   drawLoot(ctx, state);
@@ -633,6 +815,7 @@ export function render(ctx, state) {
     drawCones(ctx, state);
     drawCameras(ctx, state);
     drawGuards(ctx, state);
+    drawInvestigateTag(ctx, state);
     drawThief(ctx, state);
     drawCoin(ctx, state);
     drawSmoke(ctx, state);
@@ -643,9 +826,9 @@ export function render(ctx, state) {
 
   if (state.screen === SCREEN_TITLE) {
     drawOverlay(ctx, 'THE MIDNIGHT VAULT', [
-      'One gallery. Three guards. Two cameras. One vault.',
+      'One gallery. Three wardens. Two watch-eyes. One vault.',
       'WASD / arrows to move · 1 / 2 / 3 pick a tool · SPACE uses it',
-      '3 tosses a coin — the clink pulls the nearest guard off patrol.',
+      '3 tosses a coin — the clink pulls the nearest warden off patrol.',
       'Grab $1,000 of loot, then slip out the exit before dawn.',
       'Warm lamplight is danger. Deep shadow is safety. Smoke buys seconds.',
       '',
@@ -662,7 +845,7 @@ export function render(ctx, state) {
     const why = state.caughtBy === 'alarm'
       ? 'The alarm hit 100% — the gallery locked down around you.'
       : state.caughtBy === 'guard'
-        ? 'A guard grabbed you in the open. The cones were telling the truth.'
+        ? 'A warden grabbed you in the open. The cones were telling the truth.'
         : 'Dawn broke over the gallery. The vault keeps its secrets.';
     drawOverlay(ctx, 'CAUGHT', [why, '', 'Press R to run it back'], COLORS.danger);
   }
