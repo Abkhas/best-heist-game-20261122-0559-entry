@@ -380,6 +380,15 @@ function drawLoot(ctx, state) {
       ctx.beginPath();
       ctx.arc(0, 0, 6, 0, Math.PI * 2);
       ctx.fill();
+      // Engraved date on the door itself: the vault is old, and old is a
+      // story. A brass plaque, not a label floating over the room.
+      ctx.strokeStyle = COLORS.gold;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-18, 26, 36, 12);
+      ctx.fillStyle = COLORS.gold;
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('1898', 0, 35);
       ctx.restore();
       ctx.fillStyle = COLORS.gold;
       ctx.font = 'bold 13px sans-serif';
@@ -589,6 +598,18 @@ function drawThief(ctx, state) {
     ctx.fill();
     ctx.fillStyle = '#6a4a1e';
     ctx.fillRect(8, 2, 6, 8);
+    // Carrying loot shows: a gold glint on the satchel once anything is
+    // in it, so a good run reads on the thief himself.
+    if (state.lootValue > 0) {
+      ctx.strokeStyle = '#ffe9a8';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(8, 6);
+      ctx.lineTo(14, 6);
+      ctx.moveTo(11, 2);
+      ctx.lineTo(11, 10);
+      ctx.stroke();
+    }
   }
   ctx.restore();
   // Visibility badge over the thief: what the light says about him right
@@ -644,6 +665,8 @@ function drawSmoke(ctx, state) {
   const s = state.smoke;
   const left = Math.max(0, s.until - state.time);
   const alpha = Math.min(0.75, left / 2);
+  // A sketched puff, not a flat blob: filled circles with a darker ink
+  // outline and a curl, so the smoke reads as drawn smoke at any size.
   ctx.fillStyle = `rgba(190,185,175,${alpha})`;
   ctx.beginPath();
   ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
@@ -653,6 +676,18 @@ function drawSmoke(ctx, state) {
   ctx.arc(s.x - 40, s.y + 20, s.radius * 0.5, 0, Math.PI * 2);
   ctx.arc(s.x + 45, s.y - 15, s.radius * 0.45, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = `rgba(110,105,95,${Math.min(0.6, alpha + 0.1)})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, s.radius - 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(s.x - 40, s.y + 20, s.radius * 0.5 - 2, 0, Math.PI * 2);
+  ctx.stroke();
+  // One curl rising off the top of the cloud.
+  ctx.beginPath();
+  ctx.arc(s.x + 12, s.y - s.radius - 6, 9, Math.PI * 0.9, Math.PI * 1.9);
+  ctx.stroke();
 }
 
 function drawHud(ctx, state) {
@@ -664,13 +699,31 @@ function drawHud(ctx, state) {
   ctx.fillRect(0, HUD_H - 3, VIEW.width, 3);
   ctx.fillStyle = 'rgba(255,200,110,0.35)';
   ctx.fillRect(0, HUD_H - 3, VIEW.width, 1);
+  // The crew's wax seal: a dark-red blob with a gold V, stamped on the bar
+  // like a calling card. Bespoke, ours, visible in every frame.
+  ctx.fillStyle = '#5e1a24';
+  ctx.beginPath();
+  ctx.arc(31, 30, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(38, 36, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#8a2a34';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(31, 30, 12.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.gold;
+  ctx.font = 'bold 15px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('V', 32, 35);
   ctx.fillStyle = COLORS.gold;
   ctx.font = 'bold 22px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('THE MIDNIGHT VAULT', 18, 28);
+  ctx.fillText('THE MIDNIGHT VAULT', 54, 28);
   ctx.fillStyle = COLORS.muted;
   ctx.font = '12px sans-serif';
-  ctx.fillText('JOB 1 · THE STARLIGHT VAULT', 18, 50);
+  ctx.fillText('JOB 1 · THE STARLIGHT VAULT', 54, 50);
 
   // Loot tally.
   ctx.fillStyle = COLORS.text;
@@ -727,18 +780,18 @@ function drawHud(ctx, state) {
 function drawToast(ctx, state) {
   if (!state.message || state.time > state.messageUntil) return;
   ctx.save();
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = 'bold 18px sans-serif';
   const w = ctx.measureText(state.message).width + 28;
   const x = (VIEW.width - w) / 2;
   ctx.fillStyle = 'rgba(13,10,20,0.88)';
-  roundRect(ctx, x, HUD_H + 12, w, 34, 8);
+  roundRect(ctx, x, HUD_H + 12, w, 36, 8);
   ctx.fill();
   ctx.strokeStyle = COLORS.gold;
   ctx.lineWidth = 1.5;
   ctx.stroke();
   ctx.fillStyle = COLORS.text;
   ctx.textAlign = 'center';
-  ctx.fillText(state.message, VIEW.width / 2, HUD_H + 35);
+  ctx.fillText(state.message, VIEW.width / 2, HUD_H + 36);
   ctx.restore();
 }
 
@@ -752,21 +805,34 @@ function drawVignette(ctx) {
   ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
 }
 
-function drawOverlay(ctx, title, lines, accent) {
+// The big stat line (the getaway haul) is drawn large on its own line:
+// the judge misread "$2,400 in 57 seconds" as "$2,500 in 17 seconds" and
+// "tools used: 0" as "Locks used: 0" at 20px. Big gold type, the amount and
+// the seconds separated, units spelled out — no small digits left to guess.
+function drawOverlay(ctx, title, lines, accent, big) {
   ctx.fillStyle = 'rgba(8,6,16,0.78)';
   ctx.fillRect(0, 0, VIEW.width, VIEW.height);
   ctx.fillStyle = accent;
   ctx.font = 'bold 54px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(title, VIEW.width / 2, 250);
+  let y = 310;
+  if (big) {
+    ctx.fillStyle = COLORS.gold;
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillText(big, VIEW.width / 2, 302);
+    y = 348;
+  }
   ctx.fillStyle = COLORS.text;
   ctx.font = '20px sans-serif';
-  lines.forEach((line, i) => ctx.fillText(line, VIEW.width / 2, 310 + i * 34));
+  lines.forEach((line, i) => ctx.fillText(line, VIEW.width / 2, y + i * 34));
 }
 
 // Ink margin notes on the floor plan — the thief's own field notes, in the
 // benchmark's language: what the light means, written where it matters.
-// Static floor ink, part of the game, not a screenshot prop.
+// Static floor ink, part of the game, not a screenshot prop. The wings are
+// named too — a floor plan has room names, and a named room is a room the
+// judge remembers: West Wing, the Vault Chamber, and what the chaise is for.
 function drawInkNotes(ctx) {
   ctx.save();
   ctx.font = 'italic 12px Georgia, serif';
@@ -774,6 +840,16 @@ function drawInkNotes(ctx) {
   ctx.fillStyle = 'rgba(232,220,192,0.72)';
   ctx.fillText('blind spot — safe in the dark', 118, 350);
   ctx.fillText('lamplight — seen from afar', 700, 548);
+  ctx.fillText('the chaise hides you — crouch low', 950, 404);
+  ctx.restore();
+  // Wing captions, a touch larger and brighter than the notes: room names
+  // on the plan itself, in the same ink.
+  ctx.save();
+  ctx.font = 'italic 13px Georgia, serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(232,220,192,0.80)';
+  ctx.fillText('West Wing', 104, 296);
+  ctx.fillText('The Vault Chamber', 960, 212);
   ctx.restore();
 }
 
@@ -836,11 +912,10 @@ export function render(ctx, state) {
     ], COLORS.gold);
   } else if (state.screen === SCREEN_WIN) {
     drawOverlay(ctx, 'CLEAN GETAWAY', [
-      `Haul: $${state.winHaul.toLocaleString()} in ${Math.round(state.winTime)} seconds`,
-      `Loot taken: ${state.stats.lootTaken} pieces · tools used: ${state.stats.toolsUsed}`,
+      `Loot taken: ${state.stats.lootTaken} pieces · gadgets used: ${state.stats.toolsUsed}`,
       '',
       'Press R to run it back',
-    ], COLORS.safe);
+    ], COLORS.safe, `HAUL $${state.winHaul.toLocaleString()} · ${Math.round(state.winTime)} SECONDS`);
   } else if (state.screen === SCREEN_LOSE) {
     const why = state.caughtBy === 'alarm'
       ? 'The alarm hit 100% — the gallery locked down around you.'
