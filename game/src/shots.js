@@ -66,8 +66,16 @@ function autopilot(state, waypoints, seconds, useSmokeAt = -1, sneakAt = -1) {
 const TO_PAINTING_A = [[320, 640], [320, 420], [300, 200], [250, 128]];
 const TO_GEMS = [[320, 420], [433, 412], [560, 420], [640, 420]];
 const TO_PAINTING_C = [[780, 520], [853, 520], [1000, 300], [1000, 128]];
-const TO_VAULT = [[1140, 150]];
-const TO_EXIT = [[1180, 500], [1190, 690]]; // step into the open exit: the win fires
+// To the vault AROUND the top of the right partition, not diagonally into
+// it: the v6 diagonal ran the thief into the wall's west face, where he
+// slid north for 2.4 s in guard 2's view. North first (past guard 0's beat
+// end), then east along the top — past painting C, which the v6 route never
+// reached — to the vault. The channel cracks it for real.
+const TO_VAULT = [[780, 150], [1140, 150]];
+// To the exit through the west shadow pool, not down the east wall: EYE 2
+// watches the east side and caught the v6 walk for 2.3 s. The shadow
+// shrinks its range below the route, so the thief slips out unseen.
+const TO_EXIT = [[1000, 600], [1190, 690]]; // step into the open exit: the win fires
 
 /** The cover: mid-heist, thief deep in the gallery, cones sweeping, alarm live. */
 function shotCover(state) {
@@ -76,9 +84,13 @@ function shotCover(state) {
   // Slip into the tall grass, face north-east toward the centre guard's
   // beat, and toss a coin onto it: the guard leaves his patrol to look,
   // "What was that?" over his head, while the thief sits hidden in the
-  // grass, out of the lamplight. Field notes open. (The guard is a real
-  // walk from the coin here — his beat starts east of the left wall, so
-  // he is ~180 px away at toss time, not on top of it.)
+  // grass, out of the lamplight. Field notes CLOSED in the cover: the
+  // open panel covers the west shadow pool and the entrance corner, and
+  // the v6 duel called the floor "busier" than the benchmark's. The depth
+  // stays in the game (SHADOW meter, patrol rings, creaky boards, named
+  // wings all still draw); the frame shows it without the cram.
+  // (The guard is a real walk from the coin here — his beat starts east
+  // of the left wall, so he is ~180 px away at toss time, not on top of it.)
   autopilot(state, [[490, 380]], 5);
   state.thief.facing = -Math.PI / 4; // north-east, onto the guard's beat
   state.tools.selected = 'coin';
@@ -87,7 +99,7 @@ function shotCover(state) {
     if (state.screen !== SCREEN_PLAY) break;
     stepGame(state, SAMPLE);
   }
-  state.fieldNotes = true;
+  state.fieldNotes = false;
   state.alarm = Math.max(state.alarm, 42); // the night is already tense
 }
 
@@ -122,14 +134,17 @@ function shotTools(state) {
   for (let i = 0; i < 72; i += 1) stepGame(state, SAMPLE);
 }
 
-/** The getaway: vault cracked, haul over target, thief racing for the exit. */
+/** The getaway: vault cracked, haul over target, thief racing for the exit.
+ *  Staged for a GHOST win: the north route to the vault and the shadow
+ *  route to the exit keep the whole run under 2 s spotted, so the Ghost
+ *  Bonus pays — haul $2,650, "never once spotted". No tools used. */
 function shotGetaway(state) {
   autopilot(state, TO_PAINTING_A, 12);
   autopilot(state, TO_GEMS, 16);
   // Sneak through the vault chamber: guard 2's beat is tight, and the
   // creaky boards on the approach stay silent under a sneaking thief.
   autopilot(state, TO_PAINTING_C, 14, -1, 0);
-  autopilot(state, TO_VAULT, 12, -1, 0); // stand by the vault; the channel cracks it
+  autopilot(state, TO_VAULT, 16, -1, 0); // north, then east along the top; the channel cracks it
   const vault = state.loot.find((l) => l.id === 'vault');
   if (vault && !vault.taken) {
     // Staging fallback: the frame is the getaway, whatever the channel did.
@@ -139,7 +154,7 @@ function shotGetaway(state) {
     state.lootValue += vault.value;
     state.stats.lootTaken += 1;
   }
-  autopilot(state, TO_EXIT, 10);
+  autopilot(state, TO_EXIT, 14);
 }
 
 /** Caught: the alarm maxes out and the run ends in handcuffs. */

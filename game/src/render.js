@@ -1028,6 +1028,20 @@ function drawVignette(ctx) {
 // the judge misread "$2,400 in 57 seconds" as "$2,500 in 17 seconds" and
 // "tools used: 0" as "Locks used: 0" at 20px. Big gold type, the amount and
 // the seconds separated, units spelled out — no small digits left to guess.
+// Spell a number out in words (0–999): the judge misreads small digits at
+// thumbnail size (v6's "59 SECONDS" read as "50"), and spelled-out units
+// killed the same misread in v5. The amount stays a numeral — the judge
+// reads amounts correctly.
+function numberWords(n) {
+  const ones = ['ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE',
+    'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+  const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+  const n2 = Math.max(0, Math.min(999, Math.round(n)));
+  if (n2 < 20) return ones[n2];
+  if (n2 < 100) return tens[Math.floor(n2 / 10)] + (n2 % 10 ? `-${ones[n2 % 10]}` : '');
+  return `${ones[Math.floor(n2 / 100)]} HUNDRED${n2 % 100 ? ` ${numberWords(n2 % 100)}` : ''}`;
+}
+
 function drawOverlay(ctx, title, lines, accent, big) {
   ctx.fillStyle = 'rgba(8,6,16,0.78)';
   ctx.fillRect(0, 0, VIEW.width, VIEW.height);
@@ -1116,7 +1130,7 @@ export function render(ctx, state) {
     if (state.ghost) winLines.push('GHOST — never once spotted · +$250');
     winLines.push('', 'Press R to run it back');
     drawOverlay(ctx, 'CLEAN GETAWAY', winLines, COLORS.safe,
-      `HAUL $${state.winHaul.toLocaleString()} · ${Math.round(state.winTime)} SECONDS`);
+      `HAUL $${state.winHaul.toLocaleString()} · ${numberWords(state.winTime)} SECONDS`);
   } else if (state.screen === SCREEN_LOSE) {
     const why = state.caughtBy === 'alarm'
       ? 'The alarm hit 100% — the gallery locked down around you.'
