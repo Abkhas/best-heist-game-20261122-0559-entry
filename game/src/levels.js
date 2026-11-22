@@ -39,26 +39,44 @@ export const SHADOWS = [
   { x: 470, y: 90, w: 180, h: 90 },
 ];
 
+// Tall grass: the thief crouching in it is hidden unless a watcher is close.
+// One patch per region, each sitting just off a patrol beat so a route can
+// run through it: west wing, centre gallery, vault chamber.
+export const GRASS = [
+  { x: 280, y: 440, w: 120, h: 80 },
+  { x: 470, y: 340, w: 120, h: 80 },
+  { x: 1030, y: 520, w: 130, h: 90 },
+];
+
+// Creaky boards: worn floorboards that betray a walking thief. Sneak over
+// them (hold SHIFT) and they stay silent. Each strip lies across a route the
+// thief wants: the run from the gems to the vault chamber, and the vault
+// approach itself.
+export const CREAKY = [
+  { x: 430, y: 440, w: 380, h: 28 },
+  { x: 900, y: 300, w: 260, h: 28 },
+];
+
 // Loot. Paintings and the gem case are grab-and-go; the vault needs a channel.
 export const LOOT = [
   { id: 'painting-a', kind: 'painting', x: 250, y: 128, value: 200, label: 'Moonlit Harbour' },
   { id: 'painting-b', kind: 'painting', x: 640, y: 122, value: 200, label: 'The Gilded Fox' },
-  { id: 'painting-c', kind: 'painting', x: 1075, y: 128, value: 200, label: 'Duchess in Blue' },
+  { id: 'painting-c', kind: 'painting', x: 1000, y: 128, value: 200, label: 'Duchess in Blue' },
   { id: 'gems', kind: 'gems', x: 640, y: 420, value: 500, label: 'Starlight Gems' },
   { id: 'vault', kind: 'vault', x: 1140, y: 150, value: 1500, label: 'THE MIDNIGHT VAULT' },
 ];
 
 // Guard patrols: waypoints each guard walks, back and forth.
 export const PATROLS = [
-  { waypoints: [[300, 300], [770, 300]], speed: 56 },   // centre gallery
+  { waypoints: [[470, 300], [770, 300]], speed: 56 },   // centre gallery, east of the left wall — the beat never crosses it
   { waypoints: [[170, 180], [170, 620]], speed: 50 },   // west wing
   { waypoints: [[970, 250], [970, 640]], speed: 62 },   // vault chamber
 ];
 
 // Wall cameras: mounted on a wall, sweeping a cone.
 export const CAMERAS = [
-  { x: 640, y: 70, baseAngle: Math.PI / 2, label: 'CAM 1' },
-  { x: 1272, y: 380, baseAngle: Math.PI, label: 'CAM 2' },
+  { x: 640, y: 70, baseAngle: Math.PI / 2, label: 'EYE 1' },
+  { x: 1272, y: 380, baseAngle: Math.PI, label: 'EYE 2' },
 ];
 
 // The getaway door. It opens only once the loot target is met.
@@ -77,6 +95,48 @@ function pointInRect(px, py, r) {
 
 export function inShadow(x, y) {
   return SHADOWS.some((s) => pointInRect(x, y, s));
+}
+
+// Wall lamps: pure light, no gameplay on their own — but standing in one's
+// pool is the most exposed place in the room. Each hangs over something the
+// thief wants, so loot is always lit.
+export const LAMPS = [
+  { x: 250, y: 128 },   // over painting A
+  { x: 640, y: 122 },   // over painting B
+  { x: 1000, y: 128 },  // over painting C
+  { x: 640, y: 420 },   // over the Starlight Gems
+  { x: 1140, y: 150 },  // over the vault
+  { x: 640, y: 330 },   // centre gallery
+  { x: 1180, y: 600 },  // over the exit approach
+];
+
+export function inLamplight(x, y) {
+  return LAMPS.some((l) => Math.hypot(x - l.x, y - l.y) < 130);
+}
+
+export function inGrass(x, y) {
+  return GRASS.some((g) => pointInRect(x, y, g));
+}
+
+export function onCreaky(x, y) {
+  return CREAKY.some((c) => pointInRect(x, y, c));
+}
+
+/**
+ * Patrol legs with readable timings: for each guard, the seconds each leg
+ * of the beat takes at patrol speed, so the thief can read before moving
+ * when a guard will be where. Deterministic: pure geometry.
+ */
+export function patrolLegs() {
+  return PATROLS.map((p) => {
+    const legs = [];
+    for (let i = 0; i < p.waypoints.length; i += 1) {
+      const [x1, y1] = p.waypoints[i];
+      const [x2, y2] = p.waypoints[(i + 1) % p.waypoints.length];
+      legs.push({ from: [x1, y1], to: [x2, y2], seconds: Math.hypot(x2 - x1, y2 - y1) / p.speed });
+    }
+    return legs;
+  });
 }
 
 /** True when the straight line from (x1,y1) to (x2,y2) is blocked by a wall, cover or pillar. */
@@ -120,6 +180,30 @@ export function resolveCircle(x, y, radius) {
     if (d < min && d > 0) {
       nx = p.x + (dx / d) * min;
       ny = p.y + (dy / d) * min;
+    }
+  }
+  return { x: nx, y: ny };
+}
+
+/** Push a circle (x, y, radius) out of the partition walls only, so a guard
+ *  can never phase through a wall on patrol or on an investigate walk.
+ *  (Cover and pillars are furniture — a guard may brush them; walls are not.)
+ *  A guard whose target lies across a wall slides along it and gives up when
+ *  the investigate expires, then resumes his beat. */
+export function resolveWalls(x, y, radius) {
+  let nx = x;
+  let ny = y;
+  for (const r of WALLS) {
+    const cx = Math.max(r.x, Math.min(nx, r.x + r.w));
+    const cy = Math.max(r.y, Math.min(ny, r.y + r.h));
+    const dx = nx - cx;
+    const dy = ny - cy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < radius * radius) {
+      if (d2 === 0) { ny = r.y - radius; continue; }
+      const d = Math.sqrt(d2);
+      nx = cx + (dx / d) * radius;
+      ny = cy + (dy / d) * radius;
     }
   }
   return { x: nx, y: ny };

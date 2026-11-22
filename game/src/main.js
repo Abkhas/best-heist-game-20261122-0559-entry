@@ -12,6 +12,7 @@ import {
   playCaught, playWin, setAlarmPulse,
 } from './audio.js';
 import { applyShot } from './shots.js';
+import { patrolLegs, WALLS } from './levels.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -26,6 +27,10 @@ const input = createInput((action) => {
   ensureAudio();
   if (action === 'mute') {
     toggleMute();
+    return;
+  }
+  if (action === 'notes') {
+    state.fieldNotes = !state.fieldNotes;
     return;
   }
   if (action === 'restart') {
@@ -72,6 +77,7 @@ function frame(now) {
   if (state.screen === SCREEN_PLAY && !shot && !paused) {
     acc += dt;
     while (acc >= STEP) {
+      state.sneaking = input.isSneaking();
       const dir = input.moveDirection();
       moveThief(state, dir.dx, dir.dy, STEP);
       stepGame(state, STEP);
@@ -116,4 +122,8 @@ window.__heist = {
       if (state.screen !== SCREEN_PLAY) break;
     }
   },
+  // Patrol legs with their readable timings, for the play-test.
+  patrolLegs: () => patrolLegs(),
+  // The partition walls, for the wall-phasing play-test assertion.
+  walls: () => WALLS,
 };

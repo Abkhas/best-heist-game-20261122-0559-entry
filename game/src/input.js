@@ -21,6 +21,7 @@ export function createInput(onAction) {
     if (k === '3') onAction('tool-coin');
     if (k === 'r') onAction('restart');
     if (k === 'm') onAction('mute');
+    if (k === 'h') onAction('notes');
   });
   window.addEventListener('keyup', (e) => keys.delete(key(e)));
   window.addEventListener('blur', () => keys.clear());
@@ -50,5 +51,10 @@ export function createInput(onAction) {
     return { dx, dy };
   }
 
-  return { keys, state, moveDirection };
+  /** SHIFT held: the thief sneaks — slow, silent on creaky boards. */
+  function isSneaking() {
+    return keys.has('Shift');
+  }
+
+  return { keys, state, moveDirection, isSneaking };
 }
