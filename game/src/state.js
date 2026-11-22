@@ -1,5 +1,5 @@
-// The Midnight Vault — the run's state: the thief, the alarm, the loot, the
-// tools, and what ends the night in a win or a pair of handcuffs.
+// The Aurelius Job — the visit's state: the thief, the alarm, the loot, the
+// tools, and what ends the afternoon in a clean getaway or a pair of handcuffs.
 import {
   THIEF, ALARM, TOOLS, COIN, CREAKY, HIDING, VAULT_CHANNEL_SECONDS, LOOT_TARGET, TIME_LIMIT_SECONDS,
 } from './config.js';
@@ -14,14 +14,14 @@ export const SCREEN_LOSE = 'lose';
 export function createState() {
   return {
     screen: SCREEN_TITLE,
-    time: 0,                 // seconds since the run started
+    time: 0,                 // seconds since the visit started
     timeLeft: TIME_LIMIT_SECONDS,
     thief: { x: THIEF.startX, y: THIEF.startY, moving: false, facing: 0 },
-    sneaking: false,         // SHIFT held: slow, silent on creaky boards
-    visibility: 0,           // 0 hidden .. 1 fully exposed (HUD SHADOW meter)
-    fieldNotes: false,       // the parchment legend — H toggles, OFF in live play
-    noise: null,             // { x, y, until, kind } the latest creak, for the ring
-    lastCreak: -10,          // when the last creak pulse fired
+    sneaking: false,         // SHIFT held: the docent stroll — slow, silent on marble
+    visibility: 0,           // 0 blended in .. 1 fully exposed (HUD SUSPICION meter)
+    fieldNotes: false,       // the gallery guide — H toggles, OFF in live play
+    noise: null,             // { x, y, until, kind } the latest echo, for the ring
+    lastCreak: -10,          // when the last echo pulse fired
     guards: makeGuards(),
     cameras: makeCameras(),
     loot: LOOT.map((l) => ({ ...l, taken: false })),
@@ -29,12 +29,12 @@ export function createState() {
     alarm: 0,
     seen: false,             // any watcher sees the thief this frame
     seenBy: 'none',          // 'guard' | 'camera' | 'none'
-    smoke: null,             // { x, y, radius, until } or null
-    coin: null,              // { x, y, until, landedAt } or null
+    smoke: null,             // { x, y, radius, until } or null — the flash burst
+    coin: null,              // { x, y, until, landedAt } or null — the dropped ticket
     tools: { smoke: TOOLS.smoke.count, emp: TOOLS.emp.count, coin: TOOLS.coin.count, selected: 'smoke' },
-    vaultProgress: 0,        // 0..1 channel on the vault
+    vaultProgress: 0,        // 0..1 channel on the Crown Case
     vaultOpen: false,
-    message: '',             // one-line toast shown over the room
+    message: '',             // one-line toast shown over the gallery
     messageUntil: 0,
     caughtBy: '',            // 'alarm' | 'guard' | 'dawn'
     winHaul: 0,
@@ -60,7 +60,7 @@ export function moveThief(state, dx, dy, dt) {
   const t = state.thief;
   const len = Math.hypot(dx, dy);
   if (len < 0.01) { t.moving = false; return; }
-  // Sneak is slow and silent; shadow is fast; open floor is in between.
+  // The stroll is slow and silent; a quiet corner is fast; open floor is in between.
   const speed = state.sneaking ? THIEF.sneakSpeed
     : inShadow(t.x, t.y) ? THIEF.shadowSpeed : THIEF.speed;
   const nx = t.x + (dx / len) * speed * dt;
@@ -69,25 +69,25 @@ export function moveThief(state, dx, dy, dt) {
   t.x = fixed.x;
   t.y = fixed.y;
   t.moving = true;
-  t.facing = Math.atan2(dy, dx); // where the thief last walked: the coin flies this way
+  t.facing = Math.atan2(dy, dx); // where the thief last walked: the ticket flutters this way
 }
 
 /** Use the selected tool where the thief stands. */
 export function useTool(state) {
   if (state.screen !== SCREEN_PLAY) return;
   if (state.tools.selected === 'smoke') {
-    if (state.tools.smoke <= 0) { toast(state, 'No smoke pellets left'); return; }
+    if (state.tools.smoke <= 0) { toast(state, 'No flashbulbs left'); return; }
     state.tools.smoke -= 1;
     state.smoke = {
       x: state.thief.x, y: state.thief.y,
       radius: TOOLS.smoke.radius, until: state.time + TOOLS.smoke.seconds,
     };
     state.stats.toolsUsed += 1;
-    toast(state, 'Smoke out — slip past while they cannot see');
+    toast(state, 'Flash! — slip past while they cannot see');
   } else if (state.tools.selected === 'coin') {
-    if (state.tools.coin <= 0) { toast(state, 'No coins left'); return; }
+    if (state.tools.coin <= 0) { toast(state, 'No spare tickets left'); return; }
     state.tools.coin -= 1;
-    // The coin flies ahead of the thief and clinks on the floor; the
+    // The ticket flutters ahead of the thief and lands on the marble; the
     // nearest guard in earshot walks over to look at it.
     const land = resolveCircle(
       state.thief.x + Math.cos(state.thief.facing) * COIN.throwDistance,
@@ -96,17 +96,17 @@ export function useTool(state) {
     );
     state.coin = { x: land.x, y: land.y, until: state.time + COIN.investigateSeconds, landedAt: state.time };
     state.stats.toolsUsed += 1;
-    toast(state, 'Coin tossed — a guard goes to look');
+    toast(state, 'Ticket dropped — a guard goes to look');
   } else {
-    if (state.tools.emp <= 0) { toast(state, 'EMP charges spent'); return; }
+    if (state.tools.emp <= 0) { toast(state, 'Jammer charges spent'); return; }
     state.tools.emp -= 1;
     for (const cam of state.cameras) cam.disabledUntil = state.time + TOOLS.emp.seconds;
     state.stats.toolsUsed += 1;
-    toast(state, 'EMP burst — cameras blind for 9 seconds');
+    toast(state, 'Jammer on — cameras blind for 9 seconds');
   }
 }
 
-/** Pick up loot the thief is touching; channel the vault while standing by it. */
+/** Pick up loot the thief is touching; crack the Crown Case while standing by it. */
 function collectLoot(state, dt) {
   const t = state.thief;
   for (const item of state.loot) {
@@ -120,7 +120,7 @@ function collectLoot(state, dt) {
           item.taken = true;
           state.lootValue += item.value;
           state.stats.lootTaken += 1;
-          toast(state, `Vault cracked — $${item.value.toLocaleString()}! Get to the exit`, 3);
+          toast(state, `Crown Case cracked — $${item.value.toLocaleString()}! Get to the exit`, 3);
         }
       } else {
         state.vaultProgress = Math.max(0, state.vaultProgress - dt * 2);
@@ -142,15 +142,15 @@ export function stepGame(state, dt) {
   state.time += dt;
   state.timeLeft = Math.max(0, TIME_LIMIT_SECONDS - state.time);
 
-  // An alarm already at the max ends the run at once, before it can decay.
+  // An alarm already at the max ends the visit at once, before it can decay.
   if (state.alarm >= ALARM.max) {
     state.screen = SCREEN_LOSE;
     state.caughtBy = 'alarm';
     return;
   }
 
-  // A live coin pulls the nearest guard in earshot off patrol to look.
-  // One coin, one guard: once claimed, the coin holds no one else.
+  // A live ticket pulls the nearest guard in earshot off patrol to look.
+  // One ticket, one guard: once claimed, the ticket holds no one else.
   if (state.coin && state.time >= state.coin.until) state.coin = null;
   if (state.coin && !state.coin.claimed) {
     let nearest = null;
@@ -162,12 +162,12 @@ export function stepGame(state, dt) {
     if (nearest && nd <= COIN.investigateRadius) {
       nearest.investigate = { x: state.coin.x, y: state.coin.y, until: state.coin.until, kind: 'coin' };
       state.coin.claimed = true;
-      toast(state, '? HEARD THE COIN — off to look', 2.6);
+      toast(state, '? HEARD THE TICKET — off to look', 2.6);
     }
   }
-  // Creaky boards betray a walking thief: a loud pulse pulls the nearest
-  // guard over to look. Sneaking across them stays silent. A guard already
-  // busy looking is not pulled twice.
+  // Marble echo betrays a strolling thief: a loud pulse pulls the nearest
+  // guard over to look. The docent stroll across it stays silent. A guard
+  // already busy looking is not pulled twice.
   const t2 = state.thief;
   if (t2.moving && !state.sneaking && onCreaky(t2.x, t2.y)
     && state.time - state.lastCreak >= CREAKY.cooldownSeconds) {
@@ -181,14 +181,14 @@ export function stepGame(state, dt) {
     }
     if (nearest && nd <= CREAKY.hearRadius && !nearest.investigate) {
       nearest.investigate = { x: t2.x, y: t2.y, until: state.time + CREAKY.investigateSeconds, kind: 'creak' };
-      toast(state, 'Creaky boards! A guard heard you — sneak (SHIFT) next time', 2.6);
+      toast(state, 'Marble echo! A guard heard you — stroll (SHIFT) next time', 2.6);
     }
   }
   if (state.noise && state.time >= state.noise.until) state.noise = null;
 
-  // How exposed the thief is right now: lamplight 1.0, open floor 0.55,
-  // shadow 0.15, tall grass 0.2, sneaking multiplies it down. The SHADOW
-  // meter in the HUD reads this number. (Detection uses its own
+  // How exposed the thief is right now: skylight 1.0, open floor 0.55,
+  // quiet corner 0.15, tour group 0.2, strolling multiplies it down. The
+  // SUSPICION meter in the HUD reads this number. (Detection uses its own
   // multiplicative cover factor in guards.js — the meter is the display.)
   let vis = 0.55;
   if (inLamplight(t2.x, t2.y)) vis = 1.0;
@@ -238,7 +238,7 @@ export function stepGame(state, dt) {
     state.screen = SCREEN_WIN;
     state.winHaul = state.lootValue;
     state.winTime = state.time;
-    // Never once spotted: the Ghost Bonus pays for a clean night.
+    // Never once spotted: the Clean Visit bonus pays for a quiet afternoon.
     state.ghost = state.stats.spottedSeconds < 2;
     if (state.ghost) state.winHaul += 250;
   }

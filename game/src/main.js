@@ -1,4 +1,4 @@
-// The Midnight Vault — the game loop: fixed-step simulation, input, rendering,
+// The Aurelius Job — the game loop: fixed-step simulation, input, rendering,
 // and the ?shot= scenes the screenshots are taken from.
 import { VIEW } from './config.js';
 import {
@@ -124,6 +124,6 @@ window.__heist = {
   },
   // Patrol legs with their readable timings, for the play-test.
   patrolLegs: () => patrolLegs(),
-  // The partition walls, for the wall-phasing play-test assertion.
+  // The partitions, for the wall-phasing play-test assertion.
   walls: () => WALLS,
 };

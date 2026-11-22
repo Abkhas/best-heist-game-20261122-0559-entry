@@ -1,4 +1,4 @@
-// The Midnight Vault — keyboard and mouse: WASD/arrows to move, 1/2/3 to pick
+// The Aurelius Job — keyboard and mouse: WASD/arrows to move, 1/2/3 to pick
 // a tool, Space (or click) to use it, Enter to start, R to run it back.
 export function createInput(onAction) {
   const keys = new Set();
@@ -51,7 +51,7 @@ export function createInput(onAction) {
     return { dx, dy };
   }
 
-  /** SHIFT held: the thief sneaks — slow, silent on creaky boards. */
+  /** SHIFT held: the thief strolls like a docent — slow, silent on marble. */
   function isSneaking() {
     return keys.has('Shift');
   }

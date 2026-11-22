@@ -1,9 +1,10 @@
-// The Midnight Vault — everything the eye sees, ink-and-lamp edition.
-// One grand gallery at night, drawn like a thief's floor plan: warm plank
-// floors and slate-brick walls, gold pools of lamplight where you are seen,
-// hatched shadow pools where you vanish, glowing danger cones, glass cases
-// with treasure visible inside, and ink margin notes that say what the
-// light means. Safe, danger, hidden and noise must read at a glance.
+// The Aurelius Job — everything the eye sees, daylight-museum edition.
+// One bright museum at noon, drawn like a visitor's floor plan: pale parquet
+// floors and cream partitions, gold pools of skylight where you are seen,
+// shaded quiet corners where you vanish, tour groups to blend into, marble
+// bands that echo, saturated red danger cones, glass cases with treasure
+// visible inside, and a gallery guide that says what the light means.
+// Safe, danger, hidden and noise must read at a glance.
 import { VIEW, HUD_H, COLORS, ALARM, LOOT_TARGET, TOOLS } from './config.js';
 import {
   WALLS, COVER, PILLARS, SHADOWS, GRASS, CREAKY, LAMPS, CAMERAS, EXIT, ENTRANCE,
@@ -31,1098 +32,764 @@ function drawCone(ctx, x, y, facing, range, halfAngle, fill) {
   ctx.fill();
 }
 
+/** The three galleries: pale parquet, each zone its own tint + a big name. */
 function drawFloor(ctx) {
-  // Warm ink-and-plank floor: dark walnut boards with visible seams and
-  // grain, not flat dark tiles. The floor itself carries the lamplight.
-  ctx.fillStyle = '#241811';
-  ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
-  const plankH = 52;
-  for (let y = HUD_H, row = 0; y < VIEW.height; y += plankH, row += 1) {
-    // Per-plank tone, deterministic from the row.
-    ctx.fillStyle = ['#2a1d13', '#2e2015', '#261a11'][row % 3];
-    ctx.fillRect(0, y, VIEW.width, plankH);
-    // Seams between planks.
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0, y, VIEW.width, 2);
-    // Staggered butt joints.
-    const off = (row % 2) * 320;
-    ctx.fillRect((off + 200) % VIEW.width, y, 2, plankH);
-    ctx.fillRect((off + 760) % VIEW.width, y, 2, plankH);
-    // Grain: faint darker streaks, deterministic from row and streak.
-    ctx.strokeStyle = 'rgba(0,0,0,0.20)';
-    ctx.lineWidth = 1;
-    for (let k = 0; k < 5; k += 1) {
-      const gx = ((row * 173 + k * 271) % 1200) + 40;
-      const gy = y + 8 + ((row * 29 + k * 13) % (plankH - 16));
-      const gl = 60 + ((row * 11 + k * 47) % 140);
-      ctx.beginPath();
-      ctx.moveTo(gx, gy);
-      ctx.lineTo(Math.min(VIEW.width - 4, gx + gl), gy + ((k % 3) - 1) * 2);
-      ctx.stroke();
-    }
-    // A knot or two, darker rings on the board.
-    const kx = ((row * 389 + 500) % 1100) + 60;
-    const ky = y + plankH / 2;
-    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath();
-    ctx.ellipse(kx, ky, 9, 5, 0, 0, Math.PI * 2);
-    ctx.stroke();
+  ctx.fillStyle = COLORS.floorWest;
+  ctx.fillRect(0, HUD_H, 446, VIEW.height - HUD_H);
+  ctx.fillStyle = COLORS.floorCentre;
+  ctx.fillRect(446, HUD_H, 420, VIEW.height - HUD_H);
+  ctx.fillStyle = COLORS.floorCrown;
+  ctx.fillRect(866, HUD_H, 414, VIEW.height - HUD_H);
+  // Parquet seams: thin lines every 64 px, faint.
+  ctx.strokeStyle = 'rgba(120,90,40,0.10)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 64; x < VIEW.width; x += 64) {
+    ctx.moveTo(x, HUD_H);
+    ctx.lineTo(x, VIEW.height);
   }
+  for (let y = HUD_H + 64; y < VIEW.height; y += 64) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(VIEW.width, y);
+  }
+  ctx.stroke();
+  // Gallery names, big and quiet, along the top of each zone.
+  ctx.fillStyle = 'rgba(90,66,32,0.55)';
+  ctx.font = 'bold 22px Georgia, serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('WEST WING', 24, HUD_H + 34);
+  ctx.fillText('CENTRE ATRIUM', 470, HUD_H + 34);
+  ctx.fillText('CROWN GALLERY', 890, HUD_H + 34);
+  // The ticket desk where the thief slips in.
+  ctx.fillStyle = '#6b4e2e';
+  roundRect(ctx, ENTRANCE.x, ENTRANCE.y, ENTRANCE.w, ENTRANCE.h, 6);
+  ctx.fill();
+  ctx.fillStyle = COLORS.textLight;
+  ctx.font = 'bold 13px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('TICKETS', ENTRANCE.x + ENTRANCE.w / 2, ENTRANCE.y + 24);
+  ctx.fillText('DESK', ENTRANCE.x + ENTRANCE.w / 2, ENTRANCE.y + 42);
 }
 
-// Patrol rings: each guard's beat drawn as a dotted line, with the seconds
-// each leg takes written at its waypoints — read the timings, then move.
-// A dotted ring marks where the guard stands right now, and the dotted arcs
-// show how far each camera's cone travels.
+/** Dotted patrol rings with the seconds each leg takes, so the thief reads
+ *  the beat before moving. */
 function drawPatrols(ctx, state) {
   const legs = patrolLegs();
   ctx.save();
   ctx.setLineDash([2, 7]);
-  ctx.lineCap = 'round';
-  state.guards.forEach((g, i) => {
-    ctx.strokeStyle = 'rgba(244,239,228,0.34)';
-    ctx.lineWidth = 2;
+  ctx.lineWidth = 2;
+  state.guards.forEach((g, gi) => {
+    ctx.strokeStyle = 'rgba(140,90,20,0.75)';
     ctx.beginPath();
     const wps = g.waypoints;
     ctx.moveTo(wps[0][0], wps[0][1]);
-    for (let k = 1; k < wps.length; k += 1) ctx.lineTo(wps[k][0], wps[k][1]);
+    for (let i = 1; i < wps.length; i += 1) ctx.lineTo(wps[i][0], wps[i][1]);
     ctx.stroke();
-    // A dotted ring where the guard stands, and seconds at each waypoint.
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, GUARD.radius + 9, 0, Math.PI * 2);
-    ctx.stroke();
-    wps.forEach(([wx, wy], k) => {
-      const secs = Math.round(legs[i][k].seconds);
-      ctx.fillStyle = 'rgba(13,10,20,0.85)';
-      ctx.beginPath();
-      ctx.arc(wx, wy, 11, 0, Math.PI * 2);
+    legs[gi].forEach((leg) => {
+      const mx = (leg.from[0] + leg.to[0]) / 2;
+      const my = (leg.from[1] + leg.to[1]) / 2;
+      // Keep the label off the beat line so it never sits on a zone name:
+      // vertical legs shift right, horizontal legs shift up.
+      const vertical = Math.abs(leg.to[0] - leg.from[0]) < Math.abs(leg.to[1] - leg.from[1]);
+      const lx = vertical ? mx + 46 : mx;
+      const ly = vertical ? my : my - 22;
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#fff8e6';
+      ctx.strokeStyle = '#8a5a14';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, lx - 26, ly - 13, 52, 26, 8);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(244,239,228,0.6)';
-      ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.fillStyle = '#f4efe4';
-      ctx.font = 'bold 9px sans-serif';
+      ctx.fillStyle = '#5a3a08';
+      ctx.font = 'bold 15px Georgia, serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`${secs}s`, wx, wy + 3);
+      ctx.fillText(`${leg.seconds.toFixed(1)}s`, lx, ly + 5);
+      ctx.setLineDash([2, 7]);
     });
   });
   ctx.restore();
-  // Camera sweep arcs: the dotted arc a camera's cone travels along.
-  ctx.save();
-  ctx.setLineDash([2, 6]);
-  ctx.strokeStyle = 'rgba(255,196,90,0.30)';
-  ctx.lineWidth = 1.5;
-  for (const cam of state.cameras) {
-    ctx.beginPath();
-    ctx.arc(cam.x, cam.y, CAMERA.range,
-      cam.baseAngle - CAMERA.sweepArc - CAMERA.halfAngle,
-      cam.baseAngle + CAMERA.sweepArc + CAMERA.halfAngle);
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
-// Warm pools of lamplight, laid over the floor before anything else.
-function drawLampPools(ctx) {
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (const lamp of LAMPS) {
-    const g = ctx.createRadialGradient(lamp.x, lamp.y, 10, lamp.x, lamp.y, 200);
-    g.addColorStop(0, 'rgba(255,178,72,0.30)');
-    g.addColorStop(0.45, 'rgba(255,160,60,0.14)');
-    g.addColorStop(1, 'rgba(255,160,60,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(lamp.x, lamp.y, 200, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-  // The lamp fixtures themselves: small brass sconces with a hot core.
-  for (const lamp of LAMPS) {
-    ctx.fillStyle = '#8a6a2a';
-    ctx.beginPath();
-    ctx.arc(lamp.x, lamp.y - 6, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffd98a';
-    ctx.beginPath();
-    ctx.arc(lamp.x, lamp.y - 6, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// Shadow pools: hatched safe zones — diagonal ink hatching over a dark
-// pool with a soft feathered edge and a faint cool rim, so the eye reads
-// "dark you can stand in" at a glance, with no text at all.
-function drawShadows(ctx) {
-  for (const s of SHADOWS) {
+/** Skylight pools: bright sun on the floor. Standing in one is the most
+ *  exposed place in the museum. */
+function drawSkylightPools(ctx) {
+  for (const l of LAMPS) {
     ctx.save();
-    ctx.shadowColor = 'rgba(2,3,8,0.9)';
-    ctx.shadowBlur = 22;
-    ctx.fillStyle = 'rgba(6,8,20,0.86)';
-    roundRect(ctx, s.x, s.y, s.w, s.h, 20);
+    ctx.fillStyle = COLORS.skylight;
+    ctx.beginPath();
+    ctx.ellipse(l.x, l.y, 118, 84, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
-    // Diagonal ink hatching, clipped to the pool — the benchmark's signature
-    // for "safe": a texture, not a black hole.
-    ctx.save();
-    roundRect(ctx, s.x, s.y, s.w, s.h, 20);
-    ctx.clip();
-    ctx.strokeStyle = 'rgba(150,180,255,0.17)';
+    ctx.strokeStyle = 'rgba(190,150,60,0.55)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    for (let d = -s.h; d < s.w + s.h; d += 12) {
-      ctx.moveTo(s.x + d, s.y + s.h);
-      ctx.lineTo(s.x + d + s.h, s.y);
-    }
+    ctx.ellipse(l.x, l.y, 118, 84, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
-    ctx.strokeStyle = 'rgba(140,165,255,0.14)';
-    ctx.lineWidth = 1.5;
-    roundRect(ctx, s.x, s.y, s.w, s.h, 20);
-    ctx.stroke();
-    // A couple of faint dust motes inside the dark, so the pool has texture.
-    ctx.fillStyle = 'rgba(160,180,255,0.10)';
-    ctx.beginPath();
-    ctx.arc(s.x + s.w * 0.3, s.y + s.h * 0.4, 2, 0, Math.PI * 2);
-    ctx.arc(s.x + s.w * 0.65, s.y + s.h * 0.6, 1.6, 0, Math.PI * 2);
-    ctx.arc(s.x + s.w * 0.5, s.y + s.h * 0.25, 1.4, 0, Math.PI * 2);
-    ctx.fill();
   }
 }
 
-// Deterministic 2D hash: the same (x, y) always gives the same value, so
-// the same frame always draws the same floor.
+/** Quiet corners: shaded alcoves under the mezzanine. The alarm falls fast
+ *  here and the thief is hard to see. */
+function drawQuietCorners(ctx) {
+  for (const s of SHADOWS) {
+    ctx.fillStyle = COLORS.shadow;
+    roundRect(ctx, s.x, s.y, s.w, s.h, 10);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(70,52,28,0.5)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    roundRect(ctx, s.x, s.y, s.w, s.h, 10);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(60,44,22,0.8)';
+    ctx.font = 'bold 15px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('QUIET CORNER', s.x + s.w / 2, s.y + 24);
+  }
+}
+
 function hash2(x, y) {
-  let h = (x * 374761393 + y * 668265263) | 0;
-  h = (h ^ (h >> 13)) | 0;
-  h = Math.imul(h, 1274126177);
-  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+  const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return h - Math.floor(h);
 }
 
-// Tall grass: clusters of ink-green blades. Crouch in it and a watcher has
-// to be close to spot you. Blades are placed from the hash, never at random.
-// The foreground pass draws only the blades right over the thief, so a thief
-// in the grass reads as half-hidden.
-function drawGrass(ctx, foreground, state) {
+/** Tour groups: a guide with a flag and visitors in a cluster. The thief
+ *  inside one blends in. Drawn twice: behind the actors, then in front. */
+function drawTourGroups(ctx, foreground, state) {
   for (const g of GRASS) {
-    const blades = Math.floor((g.w * g.h) / 260);
-    for (let i = 0; i < blades; i += 1) {
-      const bx = g.x + 6 + hash2(i, 11) * (g.w - 12);
-      const by = g.y + 8 + hash2(i, 23) * (g.h - 16);
-      if (foreground) {
-        const t = state.thief;
-        if (Math.hypot(bx - t.x, by - t.y) > 46) continue;
-      }
-      const h = 14 + hash2(i, 37) * 16;
-      const sway = foreground ? 0 : Math.sin(state.time * 1.4 + i) * 1.5;
-      ctx.strokeStyle = foreground
-        ? 'rgba(74,160,90,0.85)' : 'rgba(46,110,58,0.9)';
+    if (!foreground) {
+      ctx.fillStyle = 'rgba(74,122,92,0.14)';
+      roundRect(ctx, g.x, g.y, g.w, g.h, 12);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(74,122,92,0.55)';
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.quadraticCurveTo(bx + sway, by - h * 0.6, bx + sway * 2, by - h);
+      ctx.setLineDash([6, 5]);
+      roundRect(ctx, g.x, g.y, g.w, g.h, 12);
       ctx.stroke();
-    }
-  }
-}
-
-// Creaky boards: worn, lighter planks across a route, with a small ink
-// label so the risk reads before you step on them.
-function drawCreaky(ctx) {
-  for (const c of CREAKY) {
-    ctx.fillStyle = 'rgba(214,164,96,0.16)';
-    ctx.fillRect(c.x, c.y, c.w, c.h);
-    ctx.strokeStyle = 'rgba(214,164,96,0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(c.x, c.y, c.w, c.h);
-    ctx.strokeStyle = 'rgba(214,164,96,0.30)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = c.x + 26; x < c.x + c.w; x += 26) {
-      ctx.moveTo(x, c.y + 3);
-      ctx.lineTo(x, c.y + c.h - 3);
-    }
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(232,196,130,0.75)';
-    ctx.font = 'bold 9px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('CREAKY BOARDS', c.x + 8, c.y + c.h / 2 + 3);
-  }
-}
-
-// The latest loud sound, drawn as expanding rings so the noise itself is seen.
-function drawNoise(ctx, state) {
-  if (!state.noise) return;
-  const n = state.noise;
-  const age = state.time - (n.until - 0.9);
-  const ringR = 12 + Math.min(1, age / 0.9) * 46;
-  const alpha = Math.max(0, 0.7 - age * 0.6);
-  ctx.strokeStyle = `rgba(242,163,60,${alpha})`;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(n.x, n.y, ringR, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.strokeStyle = `rgba(242,163,60,${alpha * 0.5})`;
-  ctx.beginPath();
-  ctx.arc(n.x, n.y, ringR * 0.6, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-// The parchment FIELD NOTES legend: the thief's own crib sheet — what the
-// light means, what the grass and the boards do, the keys that matter.
-// H toggles it; it defaults OFF in live play, and the screenshots show it
-// on. A small panel low on the west wall: it covers the west shadow pool
-// and the entrance corner while open, which is why it defaults off.
-function drawFieldNotes(ctx, state) {
-  if (!state.fieldNotes) return;
-  const x = 16;
-  const y = 440;
-  const w = 300;
-  const h = 200;
-  ctx.save();
-  ctx.fillStyle = 'rgba(232,217,168,0.94)';
-  roundRect(ctx, x, y, w, h, 6);
-  ctx.fill();
-  ctx.strokeStyle = '#2a2118';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.fillStyle = '#2a2118';
-  ctx.font = 'bold 13px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('FIELD NOTES', x + 12, y + 20);
-  ctx.strokeStyle = '#2a2118';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 12, y + 26);
-  ctx.lineTo(x + w - 12, y + 26);
-  ctx.stroke();
-  const rows = [
-    ['Guard + vision cone — what they see', '#e5484d'],
-    ['Blind spot behind cover — safe', '#2a2118'],
-    ['Lamplight — seen from across the room', '#c8862a'],
-    ['Tall grass — hidden unless close', '#2e6e3a'],
-    ['Creaky boards — loud unless you sneak', '#8a6a2a'],
-    ['Rings — patrol paths, seconds on each leg', '#5a4a6a'],
-    ['Exit hatch — opens once you hold the prize', '#0e6e3a'],
-  ];
-  ctx.font = '11px sans-serif';
-  rows.forEach(([text, color], i) => {
-    const ry = y + 44 + i * 20;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x + 18, ry - 3, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2a2118';
-    ctx.fillText(text, x + 28, ry);
-  });
-  ctx.restore();
-}
-
-function drawWallsAndCover(ctx) {
-  for (const w of WALLS) {
-    // Slate-blue brick, like the benchmark's walls: dark courses with
-    // mortar lines and a slight per-course tone shift, deterministic.
-    ctx.fillStyle = '#262c40';
-    ctx.fillRect(w.x, w.y, w.w, w.h);
-    const course = 14;
-    for (let y = w.y + course, row = 0; y < w.y + w.h; y += course, row += 1) {
-      ctx.fillStyle = row % 2 === 0 ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.18)';
-      ctx.fillRect(w.x, y, w.w, 1.5);
-    }
-    // Vertical joints, staggered per course, on the long wall.
-    if (w.w > w.h) {
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
-      for (let x = w.x + 46; x < w.x + w.w; x += 92) ctx.fillRect(x, w.y, 1.5, w.h);
-    }
-    // Brass trim along the top edge, catching the lamplight.
-    ctx.fillStyle = '#7a5c2e';
-    ctx.fillRect(w.x, w.y, w.w, 4);
-    ctx.fillStyle = 'rgba(255,200,110,0.25)';
-    ctx.fillRect(w.x, w.y, w.w, 1.5);
-  }
-  COVER.forEach((c, i) => {
-    // A display case you hide behind — but glass, not a black box: a
-    // wooden frame, and a colourful treasure visible inside the glass,
-    // so the furniture reads as furniture at a glance.
-    ctx.fillStyle = 'rgba(0,0,0,0.38)';
-    roundRect(ctx, c.x + 5, c.y + 7, c.w, c.h, 6);
-    ctx.fill();
-    if (c.label === 'velvet sofa') {
-      // A velvet chaise: deep burgundy cushions, brass studs, a jewel
-      // left on the seat.
-      ctx.fillStyle = '#4a1f2a';
-      roundRect(ctx, c.x, c.y, c.w, c.h, 6);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(40,80,55,0.85)';
+      ctx.font = 'bold 14px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('TOUR GROUP', g.x + g.w / 2, g.y + 20);
+      // The guide: tall, flag up.
+      const gx = g.x + 24;
+      const gy = g.y + g.h / 2 + 6;
+      ctx.strokeStyle = '#2c4a38';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(gx, gy - 26);
+      ctx.lineTo(gx, gy + 8);
+      ctx.stroke();
+      ctx.fillStyle = '#c62f2f';
+      ctx.beginPath();
+      ctx.moveTo(gx, gy - 26);
+      ctx.lineTo(gx + 16, gy - 21);
+      ctx.lineTo(gx, gy - 16);
+      ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#5d2836';
-      roundRect(ctx, c.x + 6, c.y + 6, c.w - 12, 14, 5);
+      ctx.fillStyle = '#2c4a38';
+      ctx.beginPath();
+      ctx.arc(gx, gy - 2, 7, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#c9a24a';
-      for (let sx = c.x + 12; sx < c.x + c.w - 8; sx += 16) {
+    } else {
+      // Visitors: small heads and shoulders, deterministic pseudo-random.
+      for (let i = 0; i < 5; i += 1) {
+        const vx = g.x + 48 + hash2(g.x, i) * (g.w - 60);
+        const vy = g.y + 26 + hash2(g.y, i) * (g.h - 44);
+        const shirt = ['#7a5a9e', '#3f6d8e', '#a8542e', '#5c7a3a', '#96507a'][i];
+        ctx.fillStyle = shirt;
         ctx.beginPath();
-        ctx.arc(sx, c.y + c.h - 8, 2, 0, Math.PI * 2);
+        ctx.arc(vx, vy, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e8c39a';
+        ctx.beginPath();
+        ctx.arc(vx, vy - 3, 5, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = '#8fe9ff';
-      ctx.save();
-      ctx.translate(c.x + c.w / 2, c.y + c.h / 2 + 4);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillRect(-6, -6, 12, 12);
-      ctx.restore();
-      ctx.strokeStyle = '#8a6a2a';
-      ctx.lineWidth = 2;
-      roundRect(ctx, c.x, c.y, c.w, c.h, 6);
-      ctx.stroke();
-      return;
     }
-    // Wooden frame.
-    ctx.fillStyle = '#3a2a18';
+  }
+}
+
+/** Marble echo bands: polished strips that betray a strolling thief. */
+function drawMarbleEcho(ctx) {
+  for (const c of CREAKY) {
+    ctx.fillStyle = COLORS.marble;
+    ctx.fillRect(c.x, c.y, c.w, c.h);
+    ctx.strokeStyle = 'rgba(140,110,60,0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(c.x, c.y, c.w, c.h);
+    ctx.fillStyle = 'rgba(110,84,40,0.75)';
+    ctx.font = 'bold 13px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('M A R B L E   ·   E C H O', c.x + c.w / 2, c.y + 19);
+  }
+}
+
+/** The expanding ring where an echo pulse fired. */
+function drawNoise(ctx, state) {
+  if (!state.noise) return;
+  const age = state.time - (state.noise.until - 0.9);
+  const r = 12 + age * 90;
+  ctx.save();
+  ctx.strokeStyle = `rgba(198,47,47,${Math.max(0, 0.8 - age)})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(state.noise.x, state.noise.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The gallery guide: the legend panel. H toggles; OFF in live play. */
+function drawGuide(ctx, state) {
+  if (!state.fieldNotes) return;
+  const x = 24;
+  const y = HUD_H + 12;
+  const w = 330;
+  const h = 250;
+  ctx.fillStyle = 'rgba(247,239,221,0.97)';
+  roundRect(ctx, x, y, w, h, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#8a6f4d';
+  ctx.lineWidth = 2;
+  roundRect(ctx, x, y, w, h, 10);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.text;
+  ctx.font = 'bold 19px Georgia, serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('GALLERY GUIDE', x + 16, y + 30);
+  ctx.font = '15px Georgia, serif';
+  const lines = [
+    'Red cone — a guard is looking',
+    'Amber cone — a camera is sweeping',
+    'Sun pool — you are fully seen',
+    'Quiet corner — alarm falls fast',
+    'Tour group — blend in, hard to spot',
+    'Marble band — echoes unless you stroll',
+    'SHIFT — docent stroll (slow, silent)',
+    '1 / 2 / 3 — FLASH · JAMMER · TICKET',
+    'SPACE — use the tool in hand',
+    'Goal: $1,000, then the STAFF EXIT',
+  ];
+  lines.forEach((line, i) => {
+    ctx.fillText('· ' + line, x + 16, y + 58 + i * 19);
+  });
+}
+
+/** Partitions, benches, plinths and columns. */
+function drawWallsAndCover(ctx) {
+  for (const w of WALLS) {
+    ctx.fillStyle = COLORS.wall;
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+    ctx.fillStyle = COLORS.wallTop;
+    ctx.fillRect(w.x, w.y, w.w, 6);
+    ctx.strokeStyle = 'rgba(60,42,20,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(w.x, w.y, w.w, w.h);
+  }
+  for (const c of COVER) {
+    const isBench = c.label.includes('bench');
+    ctx.fillStyle = isBench ? '#7a2e2e' : '#d8c9a3';
     roundRect(ctx, c.x, c.y, c.w, c.h, 6);
     ctx.fill();
-    // Glass: dark teal, with a treasure inside — a jewel, a vase, or a
-    // scroll, picked deterministically by the case.
-    ctx.fillStyle = '#16242c';
-    roundRect(ctx, c.x + 6, c.y + 6, c.w - 12, c.h - 12, 4);
-    ctx.fill();
-    const cx = c.x + c.w / 2;
-    const cy = c.y + c.h / 2 + 2;
-    const kind = i % 3;
-    if (kind === 0) {
-      // A sapphire in a gilt mount.
-      ctx.fillStyle = '#7fb8ff';
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillRect(-8, -8, 16, 16);
-      ctx.restore();
-      ctx.fillStyle = '#dfeeff';
-      ctx.beginPath();
-      ctx.arc(cx - 3, cy - 3, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (kind === 1) {
-      // A small porcelain vase.
-      ctx.fillStyle = '#c8d8e8';
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + 2, 9, 12, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#8fa8c0';
-      ctx.fillRect(cx - 4, cy - 16, 8, 6);
-      ctx.fillStyle = '#e8b34a';
-      ctx.fillRect(cx - 9, cy + 8, 18, 3);
-    } else {
-      // A rolled scroll, tied with gold cord.
-      ctx.fillStyle = '#e8dcc0';
-      roundRect(ctx, cx - 14, cy - 7, 28, 14, 7);
-      ctx.fill();
-      ctx.fillStyle = '#c9a24a';
-      ctx.fillRect(cx - 3, cy - 7, 3, 14);
-      ctx.fillRect(cx + 3, cy - 7, 3, 14);
-    }
-    ctx.strokeStyle = '#8a6a2a';
+    ctx.strokeStyle = 'rgba(60,42,20,0.55)';
     ctx.lineWidth = 2;
     roundRect(ctx, c.x, c.y, c.w, c.h, 6);
     ctx.stroke();
-    // Warm glass glint.
-    ctx.strokeStyle = 'rgba(255,205,120,0.4)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(c.x + 12, c.y + c.h - 10);
-    ctx.lineTo(c.x + c.w - 28, c.y + 10);
-    ctx.stroke();
-  });
+    if (!isBench) {
+      // A plinth carries a small sculpture.
+      ctx.fillStyle = '#8a7a5a';
+      ctx.beginPath();
+      ctx.arc(c.x + c.w / 2, c.y + c.h / 2 - 4, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   for (const p of PILLARS) {
-    ctx.fillStyle = '#241c2b';
+    ctx.fillStyle = '#cbb98e';
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#332740';
+    ctx.strokeStyle = '#8a6f4d';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#a98f68';
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r - 8, 0, Math.PI * 2);
     ctx.fill();
-    // Warm rim on the lamp side of the pillar.
-    ctx.strokeStyle = 'rgba(255,190,100,0.45)';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r - 2, -2.4, -0.6);
-    ctx.stroke();
   }
 }
 
-// A warm halo behind something precious, so it glints at a glance.
 function halo(ctx, x, y, radius, alpha) {
   const g = ctx.createRadialGradient(x, y, 4, x, y, radius);
-  g.addColorStop(0, `rgba(255,196,90,${alpha})`);
-  g.addColorStop(1, 'rgba(255,196,90,0)');
+  g.addColorStop(0, `rgba(230,168,23,${alpha})`);
+  g.addColorStop(1, 'rgba(230,168,23,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
 }
 
+/** Loot: framed paintings on the walls, the diamond on its plinth, and the
+ *  Crown Case with its crack progress. */
 function drawLoot(ctx, state) {
   for (const item of state.loot) {
     if (item.taken) continue;
-    const pulse = 0.55 + 0.25 * Math.sin(state.time * 3 + item.x);
     if (item.kind === 'painting') {
-      halo(ctx, item.x, item.y, 70, 0.30 * pulse + 0.12);
-      ctx.save();
-      ctx.translate(item.x, item.y);
-      // Gilt frame, canvas, a warm sun in the painting itself.
-      ctx.fillStyle = '#a8842f';
-      ctx.fillRect(-37, -27, 74, 54);
-      ctx.fillStyle = '#7a5c1e';
-      ctx.fillRect(-34, -24, 68, 48);
-      ctx.fillStyle = '#2c4a5e';
-      ctx.fillRect(-28, -18, 56, 36);
-      ctx.fillStyle = '#f2c14e';
+      halo(ctx, item.x, item.y, 54, 0.5);
+      ctx.fillStyle = '#f7efdd';
+      ctx.fillRect(item.x - 34, item.y - 24, 68, 48);
+      ctx.strokeStyle = COLORS.gold;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(item.x - 34, item.y - 24, 68, 48);
+      ctx.fillStyle = item.id === 'painting-a' ? '#3f6d8e' : item.id === 'painting-b' ? '#a8542e' : '#4a7a5c';
+      ctx.fillRect(item.x - 28, item.y - 18, 56, 36);
+      ctx.fillStyle = '#f7efdd';
       ctx.beginPath();
-      ctx.arc(-6, -4, 9, 0, Math.PI * 2);
+      ctx.arc(item.x, item.y, 9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#e8b34a';
-      ctx.fillRect(-28, 8, 56, 10);
-      ctx.restore();
-      ctx.fillStyle = `rgba(242,193,78,${pulse})`;
-      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = COLORS.text;
+      ctx.font = 'bold 13px Georgia, serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`$${item.value}`, item.x, item.y + 44);
+      ctx.fillText(`$${item.value}`, item.x, item.y + 38);
     } else if (item.kind === 'gems') {
-      halo(ctx, item.x, item.y, 80, 0.30 * pulse + 0.12);
-      ctx.save();
-      ctx.translate(item.x, item.y);
-      ctx.shadowColor = '#8fe9ff';
-      ctx.shadowBlur = 22;
-      ctx.fillStyle = '#aef2ff';
+      halo(ctx, item.x, item.y, 64, 0.7);
+      ctx.fillStyle = '#d8c9a3';
+      ctx.fillRect(item.x - 26, item.y - 8, 52, 16);
+      ctx.fillStyle = '#7fd4ff';
       ctx.beginPath();
-      ctx.moveTo(0, -20);
-      ctx.lineTo(15, 0);
-      ctx.lineTo(0, 20);
-      ctx.lineTo(-15, 0);
+      ctx.moveTo(item.x, item.y - 26);
+      ctx.lineTo(item.x + 16, item.y - 8);
+      ctx.lineTo(item.x, item.y + 6);
+      ctx.lineTo(item.x - 16, item.y - 8);
       ctx.closePath();
       ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = '#c8f4ff';
-      ctx.beginPath();
-      ctx.arc(item.x - 5, item.y - 7, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(174,242,255,${pulse})`;
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`GEMS $${item.value}`, item.x, item.y + 38);
-    } else if (item.kind === 'vault') {
-      halo(ctx, item.x, item.y, 110, 0.28 * pulse + 0.10);
-      ctx.save();
-      ctx.translate(item.x, item.y);
-      ctx.fillStyle = '#1d1508';
-      roundRect(ctx, -46, -40, 92, 80, 8);
-      ctx.fill();
-      ctx.strokeStyle = COLORS.gold;
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = '#8a6a2a';
-      ctx.beginPath();
-      ctx.arc(0, 0, 17, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.text;
+      ctx.font = 'bold 15px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`$${item.value}`, item.x, item.y + 34);
+    } else {
+      // The Crown Case: a tall glass case, gold inside, with the crack bar.
+      halo(ctx, item.x, item.y, 76, 0.7);
+      ctx.fillStyle = 'rgba(247,239,221,0.9)';
+      roundRect(ctx, item.x - 44, item.y - 52, 88, 104, 8);
       ctx.fill();
-      ctx.fillStyle = COLORS.gold;
-      ctx.beginPath();
-      ctx.arc(0, 0, 13, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#1d1508';
-      ctx.beginPath();
-      ctx.arc(0, 0, 6, 0, Math.PI * 2);
-      ctx.fill();
-      // Engraved date on the door itself: the vault is old, and old is a
-      // story. A brass plaque, not a label floating over the room.
       ctx.strokeStyle = COLORS.gold;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(-18, 26, 36, 12);
-      ctx.fillStyle = COLORS.gold;
-      ctx.font = 'bold 9px sans-serif';
+      ctx.lineWidth = 4;
+      roundRect(ctx, item.x - 44, item.y - 52, 88, 104, 8);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.goldBright;
+      ctx.beginPath();
+      ctx.moveTo(item.x, item.y - 34);
+      ctx.lineTo(item.x + 20, item.y - 6);
+      ctx.lineTo(item.x, item.y + 18);
+      ctx.lineTo(item.x - 20, item.y - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = COLORS.text;
+      ctx.font = 'bold 14px Georgia, serif';
       ctx.textAlign = 'center';
-      ctx.fillText('1898', 0, 35);
-      ctx.restore();
-      ctx.fillStyle = COLORS.gold;
-      ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('VAULT', item.x, item.y - 52);
-      ctx.fillStyle = '#f4efe4';
-      ctx.font = 'bold 11px sans-serif';
-      if (!state.vaultOpen) {
-        ctx.fillText(state.vaultProgress > 0
-          ? `CRACKING… ${Math.round(state.vaultProgress * 100)}%`
-          : 'STAND CLOSE TO CRACK', item.x, item.y + 58);
-      } else {
-        ctx.fillText('OPEN — $1,500', item.x, item.y + 58);
-      }
+      ctx.fillText('THE CROWN CASE', item.x, item.y - 64);
+      ctx.fillText(`$${item.value}`, item.x, item.y + 70);
       if (state.vaultProgress > 0 && !state.vaultOpen) {
-        ctx.fillStyle = '#0d1020';
-        ctx.fillRect(item.x - 40, item.y + 64, 80, 8);
-        ctx.fillStyle = COLORS.gold;
-        ctx.fillRect(item.x - 40, item.y + 64, 80 * state.vaultProgress, 8);
+        ctx.fillStyle = '#e0d4b4';
+        ctx.fillRect(item.x - 40, item.y + 78, 80, 10);
+        ctx.fillStyle = COLORS.goldBright;
+        ctx.fillRect(item.x - 40, item.y + 78, 80 * state.vaultProgress, 10);
+        ctx.fillStyle = COLORS.text;
+        ctx.font = 'bold 13px Georgia, serif';
+        ctx.fillText('CRACKING…', item.x, item.y + 104);
       }
     }
   }
 }
 
+/** The staff exit: shut until the haul target is met. */
 function drawExit(ctx, state) {
   const open = exitOpen(state);
-  if (open) halo(ctx, EXIT.x + EXIT.w / 2, EXIT.y + EXIT.h / 2, 90, 0.30);
-  ctx.save();
-  ctx.translate(EXIT.x + EXIT.w / 2, EXIT.y + EXIT.h / 2);
-  ctx.fillStyle = open ? '#0e2b1a' : '#1d1214';
-  roundRect(ctx, -EXIT.w / 2, -EXIT.h / 2, EXIT.w, EXIT.h, 8);
+  ctx.fillStyle = open ? COLORS.safe : '#8a2f2f';
+  roundRect(ctx, EXIT.x, EXIT.y, EXIT.w, EXIT.h, 8);
   ctx.fill();
-  ctx.strokeStyle = open ? COLORS.safe : '#6b4a4a';
+  ctx.strokeStyle = '#f7efdd';
   ctx.lineWidth = 3;
+  roundRect(ctx, EXIT.x, EXIT.y, EXIT.w, EXIT.h, 8);
   ctx.stroke();
-  ctx.fillStyle = open ? COLORS.safe : '#a08a8a';
-  ctx.font = open ? 'bold 16px sans-serif' : 'bold 13px sans-serif';
+  ctx.fillStyle = '#f7efdd';
+  ctx.font = 'bold 17px Georgia, serif';
   ctx.textAlign = 'center';
-  ctx.fillText(open ? 'EXIT — GO!' : 'EXIT — LOCKED', 0, 6);
-  ctx.restore();
-  if (!open) {
-    // The padlock over the door, and the price of opening it. The lock
-    // rides above the text so the two never overlap.
-    ctx.save();
-    ctx.translate(EXIT.x + EXIT.w / 2, EXIT.y + EXIT.h / 2);
-    ctx.fillStyle = '#f2c14e';
-    ctx.fillRect(-6, -16, 12, 10);
-    ctx.strokeStyle = '#f2c14e';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, -6, 5, Math.PI, 0);
-    ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = 'rgba(232,220,192,0.85)';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`HATCH LOCKED — NEED $${LOOT_TARGET.toLocaleString()}`, EXIT.x + EXIT.w, EXIT.y - 8);
-  }
-  // The vent the thief slipped in through, a dark grate low on the wall.
-  ctx.fillStyle = '#0c0a12';
-  ctx.fillRect(ENTRANCE.x, ENTRANCE.y, ENTRANCE.w, ENTRANCE.h);
-  ctx.strokeStyle = '#5c4a26';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(ENTRANCE.x, ENTRANCE.y, ENTRANCE.w, ENTRANCE.h);
-  ctx.strokeStyle = 'rgba(92,74,38,0.7)';
-  ctx.lineWidth = 1;
-  for (let i = 1; i < 4; i += 1) {
-    ctx.beginPath();
-    ctx.moveTo(ENTRANCE.x + 6, ENTRANCE.y + i * 14);
-    ctx.lineTo(ENTRANCE.x + ENTRANCE.w - 6, ENTRANCE.y + i * 14);
-    ctx.stroke();
-  }
+  ctx.fillText('STAFF EXIT', EXIT.x + EXIT.w / 2, EXIT.y + 21);
+  ctx.font = 'bold 13px Georgia, serif';
+  ctx.fillText(open ? 'OPEN — GO!' : 'LOCKED · $1,000', EXIT.x + EXIT.w / 2, EXIT.y + 40);
 }
 
-// Vision cones as glowing danger pools: a radial gradient — hot near the
-// watcher, fading to the far edge — plus a bright rim, so the sweep reads
-// as light, not flat paint, even shrunk to a thumbnail. Guards are red,
-// cameras amber.
 function coneFill(ctx, x, y, range, hot, mid) {
-  const g = ctx.createRadialGradient(x, y, 8, x, y, range);
-  g.addColorStop(0, hot);
-  g.addColorStop(0.55, mid);
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  return g;
+  return hot > 0.5 ? 'rgba(198,47,47,0.42)' : mid ? 'rgba(230,140,30,0.34)' : COLORS.dangerSoft;
 }
 
+/** Guard cones (red, amber when investigating) and camera cones (amber). */
 function drawCones(ctx, state) {
+  for (const g of state.guards) {
+    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange, GUARD.coneHalfAngle,
+      coneFill(ctx, g.x, g.y, GUARD.coneRange, g.alert, !!g.investigate));
+  }
   for (const cam of state.cameras) {
     if (state.time < cam.disabledUntil) continue;
-    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range, CAMERA.halfAngle,
-      coneFill(ctx, cam.x, cam.y, CAMERA.range, 'rgba(255,196,90,0.34)', 'rgba(255,176,32,0.16)'));
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,196,90,0.38)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cam.x, cam.y, CAMERA.range, cam.angle - CAMERA.halfAngle, cam.angle + CAMERA.halfAngle);
-    ctx.stroke();
-    ctx.restore();
-  }
-  for (const g of state.guards) {
-    const hot = g.alert > 0.3;
-    const investigating = !!g.investigate;
-    const outer = investigating ? ['rgba(242,163,60,0.42)', 'rgba(242,163,60,0.20)']
-      : hot ? ['rgba(229,72,77,0.46)', 'rgba(229,72,77,0.22)']
-        : ['rgba(229,72,77,0.36)', 'rgba(229,72,77,0.16)'];
-    const rim = investigating ? 'rgba(242,163,60,0.5)'
-      : hot ? 'rgba(255,90,80,0.55)' : 'rgba(255,90,80,0.4)';
-    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange, GUARD.coneHalfAngle,
-      coneFill(ctx, g.x, g.y, GUARD.coneRange, outer[0], outer[1]));
-    ctx.save();
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, GUARD.coneRange, g.facing - GUARD.coneHalfAngle, g.facing + GUARD.coneHalfAngle);
-    ctx.stroke();
-    ctx.restore();
+    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range, CAMERA.halfAngle, COLORS.cameraCone);
   }
 }
 
+/** Wall cameras: small mounts with a sweeping eye. */
 function drawCameras(ctx, state) {
   for (const cam of state.cameras) {
-    const disabled = state.time < cam.disabledUntil;
-    ctx.save();
-    ctx.translate(cam.x, cam.y);
-    // Brass housing, amber lens when live.
-    ctx.fillStyle = disabled ? '#3a3f55' : '#8a6a2a';
+    const off = state.time < cam.disabledUntil;
+    ctx.fillStyle = off ? '#9a8a6a' : '#3a3230';
     ctx.beginPath();
-    ctx.arc(0, 0, 11, 0, Math.PI * 2);
+    ctx.arc(cam.x, cam.y, 11, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = disabled ? '#555b73' : '#e8c96a';
-    ctx.rotate(cam.angle);
-    ctx.fillRect(0, -4, 20, 8);
-    ctx.fillStyle = disabled ? '#555b73' : '#ff5a4d';
+    ctx.strokeStyle = off ? '#6a5a42' : COLORS.danger;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(20, 0, 3, 0, Math.PI * 2);
+    ctx.arc(cam.x, cam.y, 11, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = off ? '#6a5a42' : COLORS.danger;
+    ctx.beginPath();
+    ctx.arc(cam.x + Math.cos(cam.angle) * 6, cam.y + Math.sin(cam.angle) * 6, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = disabled ? '#8a90a8' : '#f4efe4';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = COLORS.text;
+    ctx.font = 'bold 13px Georgia, serif';
     ctx.textAlign = 'center';
-    ctx.fillText(disabled ? 'EYE OFF' : cam.label, Math.max(30, Math.min(1250, cam.x)), cam.y + 28);
+    // Clamp the label inside the canvas: CAM 2 mounts at the right edge.
+    ctx.fillText(cam.label, Math.min(cam.x, 1230), cam.y - 20);
   }
 }
 
+/** Guards: navy uniforms, a "?" when they go to look, and a dotted thread
+ *  to the spot they are walking to. */
 function drawGuards(ctx, state) {
   for (const g of state.guards) {
-    // Each guard carries a lantern: a warm pool that marks him in the dark.
-    const lg = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, 52);
-    lg.addColorStop(0, 'rgba(255,178,72,0.28)');
-    lg.addColorStop(1, 'rgba(255,178,72,0)');
-    ctx.fillStyle = lg;
-    ctx.beginPath();
-    ctx.arc(g.x, g.y, 46, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.save();
-    ctx.translate(g.x, g.y);
-    // Body: dark uniform with a gold cap band; brim points where he faces.
-    ctx.fillStyle = '#232c4e';
-    ctx.beginPath();
-    ctx.arc(0, 0, GUARD.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = g.alert > 0.3 ? COLORS.danger : g.investigate ? '#f2a33c' : '#8a94c4';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    ctx.rotate(g.facing);
-    ctx.fillStyle = '#e8c96a';
-    ctx.fillRect(-GUARD.radius + 2, -3, 6, 6);
-    ctx.fillStyle = '#dfe6ff';
-    ctx.beginPath();
-    ctx.moveTo(GUARD.radius + 8, 0);
-    ctx.lineTo(GUARD.radius - 2, -6);
-    ctx.lineTo(GUARD.radius - 2, 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    if (g.alert > 0.3) {
-      ctx.fillStyle = COLORS.danger;
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('!', g.x, g.y - GUARD.radius - 8);
-    } else if (g.investigate) {
-      ctx.fillStyle = '#f2a33c';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('?', g.x, g.y - GUARD.radius - 8);
-      // The graduated investigation, out loud: what he heard, and a dotted
-      // thread from him to the spot he is walking over to check.
-      const label = g.investigate.kind === 'coin' ? 'What was that?'
-        : g.investigate.kind === 'creak' ? 'What was that?'
-          : 'Thought I saw something…';
-      ctx.save();
-      ctx.font = 'bold 12px sans-serif';
-      const w = ctx.measureText(label).width + 18;
-      const bx = Math.max(8, Math.min(VIEW.width - w - 8, g.x - w / 2));
-      const by = g.y - GUARD.radius - 44;
-      ctx.fillStyle = 'rgba(244,239,228,0.95)';
-      roundRect(ctx, bx, by, w, 24, 6);
-      ctx.fill();
-      ctx.fillStyle = '#2a2118';
-      ctx.textAlign = 'center';
-      ctx.fillText(label, bx + w / 2, by + 17);
-      ctx.restore();
+    if (g.investigate) {
       ctx.save();
       ctx.setLineDash([3, 6]);
-      ctx.strokeStyle = 'rgba(242,163,60,0.55)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(198,47,47,0.8)';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(g.x, g.y);
       ctx.lineTo(g.investigate.x, g.investigate.y);
       ctx.stroke();
       ctx.restore();
     }
-  }
-}
-
-function drawThief(ctx, state) {
-  const t = state.thief;
-  const hidden = inShadow(t.x, t.y);
-  ctx.save();
-  ctx.translate(t.x, t.y);
-  // A hooded figure, not a triangle: a cloak that flares at the base, a
-  // hood with a shadowed face, a satchel at the hip and a gold clasp —
-  // a character the eye finds in one frame, at any size.
-  ctx.fillStyle = hidden ? '#0a0f14' : '#123f38';
-  ctx.beginPath();
-  ctx.moveTo(0, -15);
-  ctx.quadraticCurveTo(10, -8, 13, 8);
-  ctx.quadraticCurveTo(6, 13, 0, 13);
-  ctx.quadraticCurveTo(-6, 13, -13, 8);
-  ctx.quadraticCurveTo(-10, -8, 0, -15);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = hidden ? '#1c2b33' : '#1f7a6d';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  // Hood: a darker cowl over the face, two eye glints in the lamplight.
-  ctx.fillStyle = hidden ? '#05070a' : '#0c2a25';
-  ctx.beginPath();
-  ctx.arc(0, -6, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-  if (!hidden) {
-    ctx.fillStyle = '#f4efe4';
+    ctx.fillStyle = '#1f2a44';
     ctx.beginPath();
-    ctx.arc(-2.2, -6, 1.1, 0, Math.PI * 2);
-    ctx.arc(2.2, -6, 1.1, 0, Math.PI * 2);
+    ctx.arc(g.x, g.y, GUARD.radius, 0, Math.PI * 2);
     ctx.fill();
-    // Gold clasp at the throat, and the satchel at the hip.
-    ctx.fillStyle = COLORS.gold;
+    ctx.strokeStyle = '#f7efdd';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 4, 2.2, 0, Math.PI * 2);
+    ctx.arc(g.x, g.y, GUARD.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    // Cap brim in the facing direction.
+    ctx.fillStyle = '#f7efdd';
+    ctx.beginPath();
+    ctx.arc(g.x + Math.cos(g.facing) * 9, g.y + Math.sin(g.facing) * 9, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#6a4a1e';
-    ctx.fillRect(8, 2, 6, 8);
-    // Carrying loot shows: a gold glint on the satchel once anything is
-    // in it, so a good run reads on the thief himself.
-    if (state.lootValue > 0) {
-      ctx.strokeStyle = '#ffe9a8';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(8, 6);
-      ctx.lineTo(14, 6);
-      ctx.moveTo(11, 2);
-      ctx.lineTo(11, 10);
+    if (g.investigate) {
+      ctx.fillStyle = '#fff8e6';
+      ctx.strokeStyle = '#8a5a14';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, g.x - 11, g.y - 34, 22, 22, 6);
+      ctx.fill();
       ctx.stroke();
+      ctx.fillStyle = '#5a3a08';
+      ctx.font = 'bold 16px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('?', g.x, g.y - 18);
+    }
+    if (g.alert > 0.5) {
+      ctx.fillStyle = COLORS.danger;
+      ctx.font = 'bold 13px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', g.x, g.y - 22);
     }
   }
-  ctx.restore();
-  // Visibility badge over the thief: what the light says about him right
-  // now — HIDDEN in shadow or grass, DIM on the open floor, EXPOSED under
-  // a lamp. Small, and it rides with the thief, so the concealment reads
-  // in any frame.
-  const v = state.visibility;
-  const label = v >= 0.8 ? 'EXPOSED' : v >= 0.4 ? 'DIM' : 'HIDDEN';
-  const badge = label === 'HIDDEN'
-    ? ['rgba(16,24,54,0.88)', '#7fa0e0', '#a9c2ff']
-    : label === 'EXPOSED'
-      ? ['rgba(54,38,12,0.88)', '#f2a33c', '#f2c14e']
-      : ['rgba(40,32,20,0.88)', '#c9a24a', '#d8c08a'];
-  ctx.save();
-  ctx.font = 'bold 11px sans-serif';
-  const w = ctx.measureText(label).width + 18;
-  const bx = t.x - w / 2;
-  const by = t.y - 34;
-  ctx.fillStyle = badge[0];
-  roundRect(ctx, bx, by, w, 17, 8);
-  ctx.fill();
-  ctx.strokeStyle = badge[1];
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  ctx.fillStyle = badge[2];
-  ctx.textAlign = 'center';
-  ctx.fillText(label, t.x, by + 12.5);
-  ctx.restore();
 }
 
-// The tossed coin: a gold disc and the noise rings that pulled a guard over.
-function drawCoin(ctx, state) {
-  if (!state.coin) return;
-  const c = state.coin;
-  const age = state.time - c.landedAt;
-  const ringR = 14 + Math.min(1, age / 0.7) * 52;
-  const ringAlpha = Math.max(0, 0.75 - age * 0.14);
-  ctx.strokeStyle = `rgba(242,193,78,${ringAlpha})`;
-  ctx.lineWidth = 2.5;
+/** The thief: a docent in a navy blazer with a name badge, strolling. */
+function drawThief(ctx, state) {
+  const t = state.thief;
+  const inTour = inGrass(t.x, t.y);
+  ctx.fillStyle = '#2e4a7a';
   ctx.beginPath();
-  ctx.arc(c.x, c.y, ringR, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.strokeStyle = `rgba(242,193,78,${ringAlpha * 0.5})`;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, ringR * 0.62, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = '#f2c14e';
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+  ctx.arc(t.x, t.y, THIEF_RADIUS, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#8a6a2a';
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawSmoke(ctx, state) {
-  if (!state.smoke) return;
-  const s = state.smoke;
-  const left = Math.max(0, s.until - state.time);
-  const alpha = Math.min(0.75, left / 2);
-  // A sketched puff, not a flat blob: filled circles with a darker ink
-  // outline and a curl, so the smoke reads as drawn smoke at any size.
-  ctx.fillStyle = `rgba(190,185,175,${alpha})`;
-  ctx.beginPath();
-  ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(190,185,175,0.5)';
-  ctx.beginPath();
-  ctx.arc(s.x - 40, s.y + 20, s.radius * 0.5, 0, Math.PI * 2);
-  ctx.arc(s.x + 45, s.y - 15, s.radius * 0.45, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = `rgba(110,105,95,${Math.min(0.6, alpha + 0.1)})`;
+  ctx.strokeStyle = '#f7efdd';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(s.x, s.y, s.radius - 2, 0, Math.PI * 2);
+  ctx.arc(t.x, t.y, THIEF_RADIUS, 0, Math.PI * 2);
   ctx.stroke();
+  // Badge: a small gold square on the chest.
+  ctx.fillStyle = COLORS.goldBright;
+  ctx.fillRect(t.x - 3, t.y - 2, 6, 5);
+  // Facing tick.
+  ctx.fillStyle = '#f7efdd';
   ctx.beginPath();
-  ctx.arc(s.x - 40, s.y + 20, s.radius * 0.5 - 2, 0, Math.PI * 2);
-  ctx.stroke();
-  // One curl rising off the top of the cloud.
-  ctx.beginPath();
-  ctx.arc(s.x + 12, s.y - s.radius - 6, 9, Math.PI * 0.9, Math.PI * 1.9);
-  ctx.stroke();
-}
-
-function drawHud(ctx, state) {
-  // Ink-and-parchment bar: warm dark ink with a brass rule underneath, and
-  // the job named like the benchmark's — a job, not a menu.
-  ctx.fillStyle = '#171019';
-  ctx.fillRect(0, 0, VIEW.width, HUD_H);
-  ctx.fillStyle = '#7a5c2e';
-  ctx.fillRect(0, HUD_H - 3, VIEW.width, 3);
-  ctx.fillStyle = 'rgba(255,200,110,0.35)';
-  ctx.fillRect(0, HUD_H - 3, VIEW.width, 1);
-  // The crew's wax seal: a dark-red blob with a gold V, stamped on the bar
-  // like a calling card. Bespoke, ours, visible in every frame.
-  ctx.fillStyle = '#5e1a24';
-  ctx.beginPath();
-  ctx.arc(31, 30, 14, 0, Math.PI * 2);
+  ctx.arc(t.x + Math.cos(t.facing) * 9, t.y + Math.sin(t.facing) * 9, 3, 0, Math.PI * 2);
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(38, 36, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#8a2a34';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(31, 30, 12.5, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = COLORS.gold;
-  ctx.font = 'bold 15px Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('V', 32, 35);
-  ctx.fillStyle = COLORS.gold;
-  ctx.font = 'bold 22px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('THE MIDNIGHT VAULT', 54, 28);
-  // SHADOW meter: how exposed the thief is right now — the visibility the
-  // watchers see, at a glance. Deep shadow and tall grass empty it, a lamp
-  // pool fills it, sneaking lowers it. (The job is named on the title screen
-  // and in the field notes instead.)
-  const v = state.visibility;
-  const vWord = v >= 0.8 ? 'EXPOSED' : v >= 0.4 ? 'DIM' : 'HIDDEN';
-  const vColor = v >= 0.8 ? COLORS.danger : v >= 0.4 ? '#f2a33c' : COLORS.safe;
-  ctx.fillStyle = vColor;
-  ctx.font = 'bold 13px sans-serif';
-  ctx.fillText('SHADOW', 54, 42);
-  ctx.fillStyle = '#2a2438';
-  ctx.fillRect(54, 46, 130, 10);
-  ctx.fillStyle = vColor;
-  ctx.fillRect(54, 46, 130 * v, 10);
-  ctx.fillStyle = COLORS.muted;
-  ctx.font = '11px sans-serif';
-  ctx.fillText(`${vWord} · ${Math.round(v * 100)}%`, 192, 50);
   if (state.sneaking) {
-    ctx.fillStyle = '#8fd0ff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('SNEAKING', 310, 50);
+    ctx.fillStyle = COLORS.text;
+    ctx.font = 'bold 12px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('STROLLING', t.x, t.y - 20);
   }
-
-  // Loot tally.
-  ctx.fillStyle = COLORS.text;
-  ctx.font = 'bold 20px sans-serif';
-  ctx.textAlign = 'left';
-  const lootText = `LOOT $${state.lootValue.toLocaleString()} / $${LOOT_TARGET.toLocaleString()}`;
-  ctx.fillText(lootText, 430, 28);
-  ctx.fillStyle = '#2a2438';
-  ctx.fillRect(430, 36, 260, 10);
-  ctx.fillStyle = COLORS.gold;
-  ctx.fillRect(430, 36, 260 * Math.min(1, state.lootValue / LOOT_TARGET), 10);
-
-  // Alarm meter.
-  const ax = 730;
-  ctx.fillStyle = state.alarm > 60 ? COLORS.danger : COLORS.text;
-  ctx.font = 'bold 20px sans-serif';
-  ctx.fillText('ALARM', ax, 28);
-  ctx.fillStyle = '#2a2438';
-  ctx.fillRect(ax, 36, 200, 10);
-  const alarmColor = state.alarm > 60 ? COLORS.danger : state.alarm > 30 ? '#f2a33c' : COLORS.safe;
-  ctx.fillStyle = alarmColor;
-  ctx.fillRect(ax, 36, 200 * (state.alarm / ALARM.max), 10);
-  if (state.seen) {
-    ctx.fillStyle = COLORS.danger;
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(state.seenBy === 'guard' ? 'SPOTTED BY A WARDEN!' : 'ON CAMERA!', ax + 210, 46);
+  if (inTour) {
+    ctx.fillStyle = 'rgba(40,80,55,0.9)';
+    ctx.font = 'bold 12px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('BLENDING IN', t.x, t.y + 26);
   }
-
-  // Tools.
-  ctx.fillStyle = COLORS.text;
-  ctx.font = 'bold 15px sans-serif';
-  ctx.textAlign = 'left';
-  const sel = state.tools.selected;
-  ctx.fillStyle = sel === 'smoke' ? COLORS.gold : COLORS.muted;
-  ctx.fillText(`[1] SMOKE ×${state.tools.smoke}`, 990, 20);
-  ctx.fillStyle = sel === 'emp' ? COLORS.gold : COLORS.muted;
-  ctx.fillText(`[2] EMP ×${state.tools.emp}`, 990, 38);
-  ctx.fillStyle = sel === 'coin' ? COLORS.gold : COLORS.muted;
-  ctx.fillText(`[3] COIN ×${state.tools.coin}`, 990, 56);
-
-  // Timer.
-  const mins = Math.floor(state.timeLeft / 60);
-  const secs = Math.floor(state.timeLeft % 60);
-  ctx.fillStyle = state.timeLeft < 30 ? COLORS.danger : COLORS.text;
-  ctx.font = 'bold 22px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${mins}:${String(secs).padStart(2, '0')}`, 1262, 32);
-  ctx.fillStyle = COLORS.muted;
-  ctx.font = '11px sans-serif';
-  ctx.fillText('TO DAWN', 1262, 50);
-  ctx.textAlign = 'left';
 }
 
-function drawToast(ctx, state) {
-  if (!state.message || state.time > state.messageUntil) return;
+const THIEF_RADIUS = 13;
+
+/** The dropped ticket: a small white slip with gold rings blooming. */
+function drawCoin(ctx, state) {
+  if (!state.coin) return;
+  const age = state.time - state.coin.landedAt;
+  const r = Math.min(46, 8 + age * 60);
   ctx.save();
-  ctx.font = 'bold 18px sans-serif';
-  const w = ctx.measureText(state.message).width + 28;
-  const x = (VIEW.width - w) / 2;
-  ctx.fillStyle = 'rgba(13,10,20,0.88)';
-  roundRect(ctx, x, HUD_H + 12, w, 36, 8);
-  ctx.fill();
+  ctx.strokeStyle = `rgba(180,134,11,${Math.max(0, 0.9 - age * 0.4)})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(state.coin.x, state.coin.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(state.coin.x, state.coin.y, r * 0.6, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#fffdf4';
+  ctx.fillRect(state.coin.x - 7, state.coin.y - 4, 14, 8);
   ctx.strokeStyle = COLORS.gold;
   ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = COLORS.text;
-  ctx.textAlign = 'center';
-  ctx.fillText(state.message, VIEW.width / 2, HUD_H + 36);
-  ctx.restore();
+  ctx.strokeRect(state.coin.x - 7, state.coin.y - 4, 14, 8);
 }
 
-// A faint vignette over the room only, so the eye sits in the middle of the
-// gallery. Subtle: loot near the edges must stay legible.
-function drawVignette(ctx) {
-  const g = ctx.createRadialGradient(640, 392, 300, 640, 392, 780);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(0,0,0,0.22)');
+/** The flash burst: a white-gold bloom where the thief stands. */
+function drawSmoke(ctx, state) {
+  if (!state.smoke) return;
+  const left = state.smoke.until - state.time;
+  const alpha = Math.max(0, Math.min(0.85, left / 2));
+  const g = ctx.createRadialGradient(
+    state.smoke.x, state.smoke.y, 6,
+    state.smoke.x, state.smoke.y, state.smoke.radius,
+  );
+  g.addColorStop(0, `rgba(255,250,220,${alpha})`);
+  g.addColorStop(1, 'rgba(255,250,220,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(state.smoke.x, state.smoke.y, state.smoke.radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = `rgba(90,66,32,${alpha})`;
+  ctx.font = 'bold 15px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('FLASH!', state.smoke.x, state.smoke.y - state.smoke.radius - 8);
+}
+
+/** The HUD: title, loot, SUSPICION meter, alarm bar, tools, closing bell. */
+function drawHud(ctx, state) {
+  ctx.fillStyle = COLORS.hud;
+  ctx.fillRect(0, 0, VIEW.width, HUD_H);
+  ctx.fillStyle = COLORS.textLight;
+  ctx.font = 'bold 21px Georgia, serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('THE AURELIUS JOB', 16, 28);
+  ctx.font = '13px Georgia, serif';
+  ctx.fillStyle = '#c9b896';
+  ctx.fillText('a museum heist in daylight', 16, 48);
+
+  // Loot.
+  ctx.fillStyle = COLORS.goldBright;
+  ctx.font = 'bold 22px Georgia, serif';
+  ctx.fillText(`LOOT $${state.lootValue.toLocaleString()}`, 300, 30);
+  ctx.fillStyle = '#c9b896';
+  ctx.font = '13px Georgia, serif';
+  ctx.fillText(`target $${LOOT_TARGET.toLocaleString()}`, 300, 50);
+
+  // SUSPICION meter.
+  const mx = 520;
+  const mw = 200;
+  ctx.fillStyle = '#c9b896';
+  ctx.font = 'bold 13px Georgia, serif';
+  ctx.fillText('SUSPICION', mx, 18);
+  ctx.fillStyle = COLORS.hudBar;
+  roundRect(ctx, mx, 24, mw, 16, 5);
+  ctx.fill();
+  const vis = state.visibility;
+  ctx.fillStyle = vis >= 0.8 ? COLORS.danger : vis >= 0.4 ? '#d98a1f' : COLORS.safe;
+  roundRect(ctx, mx, 24, mw * vis, 16, 5);
+  ctx.fill();
+  ctx.fillStyle = COLORS.textLight;
+  ctx.font = 'bold 14px Georgia, serif';
+  ctx.textAlign = 'left';
+  const label = vis >= 0.8 ? 'EXPOSED' : vis >= 0.4 ? 'NOTICED' : 'BLENDING IN';
+  ctx.fillText(label + (state.sneaking ? ' · STROLLING' : ''), mx, 56);
+
+  // Alarm bar.
+  const ax = 760;
+  const aw = 200;
+  ctx.fillStyle = '#c9b896';
+  ctx.font = 'bold 13px Georgia, serif';
+  ctx.fillText('ALARM', ax, 18);
+  ctx.fillStyle = COLORS.hudBar;
+  roundRect(ctx, ax, 24, aw, 16, 5);
+  ctx.fill();
+  ctx.fillStyle = state.alarm >= 70 ? COLORS.danger : state.alarm >= 35 ? '#d98a1f' : COLORS.safe;
+  roundRect(ctx, ax, 24, aw * (state.alarm / ALARM.max), 16, 5);
+  ctx.fill();
+  ctx.fillStyle = COLORS.textLight;
+  ctx.font = 'bold 14px Georgia, serif';
+  ctx.fillText(`${Math.round(state.alarm)} / 100`, ax, 56);
+
+  // Tools. (The closing bell lives under the alarm bar, not up here —
+  // three tool boxes and a timer do not fit in one row.)
+  const tools = [
+    ['1', 'FLASH', state.tools.smoke],
+    ['2', 'JAMMER', state.tools.emp],
+    ['3', 'TICKET', state.tools.coin],
+  ];
+  tools.forEach(([key, label, count], i) => {
+    const tx = 975 + i * 93;
+    const selected = state.tools.selected === ['smoke', 'emp', 'coin'][i];
+    ctx.fillStyle = selected ? COLORS.goldBright : COLORS.hudBar;
+    roundRect(ctx, tx, 12, 88, 40, 6);
+    ctx.fill();
+    ctx.fillStyle = selected ? COLORS.text : COLORS.textLight;
+    ctx.font = 'bold 13px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${key} ${label} ×${count}`, tx + 44, 30);
+    ctx.font = '11px Georgia, serif';
+    ctx.fillText(selected ? 'IN HAND' : '', tx + 44, 46);
+  });
+
+  // Closing bell, under the alarm bar.
+  const mins = Math.floor(state.timeLeft / 60);
+  const secs = Math.floor(state.timeLeft % 60);
+  ctx.fillStyle = state.timeLeft <= 30 ? COLORS.danger : COLORS.textLight;
+  ctx.font = 'bold 15px Georgia, serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`CLOSES ${mins}:${String(secs).padStart(2, '0')}`, ax + aw, 56);
+  ctx.textAlign = 'left';
+}
+
+/** The toast line over the gallery. */
+function drawToast(ctx, state) {
+  if (!state.message || state.time > state.messageUntil) return;
+  ctx.fillStyle = 'rgba(43,33,24,0.92)';
+  const w = Math.min(760, ctx.measureText(state.message).width + 48);
+  roundRect(ctx, (VIEW.width - w) / 2, HUD_H + 10, w, 34, 8);
+  ctx.fill();
+  ctx.fillStyle = '#f7efdd';
+  ctx.font = 'bold 17px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(state.message, VIEW.width / 2, HUD_H + 33);
+  ctx.textAlign = 'left';
+}
+
+/** A warm daylight wash over the whole frame. */
+function drawDaylight(ctx) {
+  const g = ctx.createLinearGradient(0, HUD_H, 0, VIEW.height);
+  g.addColorStop(0, 'rgba(255,244,200,0.10)');
+  g.addColorStop(1, 'rgba(255,244,200,0.0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
 }
 
-// The big stat line (the getaway haul) is drawn large on its own line:
-// the judge misread "$2,400 in 57 seconds" as "$2,500 in 17 seconds" and
-// "tools used: 0" as "Locks used: 0" at 20px. Big gold type, the amount and
-// the seconds separated, units spelled out — no small digits left to guess.
+/** Full-screen overlay for title, win and lose. */
 function drawOverlay(ctx, title, lines, accent, big) {
-  ctx.fillStyle = 'rgba(8,6,16,0.78)';
+  ctx.fillStyle = 'rgba(43,33,24,0.82)';
   ctx.fillRect(0, 0, VIEW.width, VIEW.height);
-  ctx.fillStyle = accent;
-  ctx.font = 'bold 54px sans-serif';
+  ctx.fillStyle = '#f7efdd';
+  ctx.font = `bold ${big ? 54 : 44}px Georgia, serif`;
   ctx.textAlign = 'center';
   ctx.fillText(title, VIEW.width / 2, 250);
-  let y = 310;
-  if (big) {
-    ctx.fillStyle = COLORS.gold;
-    ctx.font = 'bold 30px sans-serif';
-    ctx.fillText(big, VIEW.width / 2, 302);
-    y = 348;
-  }
-  ctx.fillStyle = COLORS.text;
-  ctx.font = '20px sans-serif';
-  lines.forEach((line, i) => ctx.fillText(line, VIEW.width / 2, y + i * 34));
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 24px Georgia, serif';
+  lines.forEach((line, i) => {
+    ctx.fillText(line, VIEW.width / 2, 310 + i * 36);
+  });
+  ctx.fillStyle = '#c9b896';
+  ctx.font = '17px Georgia, serif';
+  ctx.fillText('Press ENTER to start · R to run it back · H for the guide', VIEW.width / 2, 310 + lines.length * 36 + 24);
+  ctx.textAlign = 'left';
 }
 
-// Ink margin notes on the floor plan — the thief's own field notes, in the
-// benchmark's language: what the light means, written where it matters.
-// Static floor ink, part of the game, not a screenshot prop. The wings are
-// named too — a floor plan has room names, and a named room is a room the
-// judge remembers: West Wing, the Vault Chamber, and what the chaise is for.
-function drawInkNotes(ctx) {
-  ctx.save();
-  ctx.font = 'italic 12px Georgia, serif';
+function drawMarginNotes(ctx) {
+  ctx.fillStyle = 'rgba(90,66,32,0.6)';
+  ctx.font = 'italic 14px Georgia, serif';
   ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(232,220,192,0.72)';
-  ctx.fillText('blind spot — safe in the dark', 118, 350);
-  ctx.fillText('lamplight — seen from afar', 700, 548);
-  ctx.fillText('the chaise hides you — crouch low', 950, 404);
-  ctx.restore();
-  // Wing captions, a touch larger and brighter than the notes: room names
-  // on the plan itself, in the same ink.
-  ctx.save();
-  ctx.font = 'italic 13px Georgia, serif';
+  ctx.fillText('sun is the danger — shade is the friend', 24, VIEW.height - 16);
+  ctx.textAlign = 'right';
+  ctx.fillText('blend in with the tour groups', VIEW.width - 24, VIEW.height - 16);
   ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(232,220,192,0.80)';
-  ctx.fillText('West Wing', 104, 296);
-  ctx.fillText('The Vault Chamber', 960, 212);
-  ctx.restore();
 }
 
 export function render(ctx, state) {
-  drawFloor(ctx);
-  drawLampPools(ctx);
-  drawShadows(ctx);
-  drawGrass(ctx, false, state);
-  drawCreaky(ctx);
-  drawInkNotes(ctx);
-  drawWallsAndCover(ctx);
-  drawPatrols(ctx, state);
-  drawExit(ctx, state);
-  drawLoot(ctx, state);
-  if (state.screen !== SCREEN_TITLE) {
-    drawCones(ctx, state);
-    drawCameras(ctx, state);
-    drawGuards(ctx, state);
-    drawThief(ctx, state);
-    if (inGrass(state.thief.x, state.thief.y)) drawGrass(ctx, true, state);
-    drawCoin(ctx, state);
-    drawSmoke(ctx, state);
-    drawNoise(ctx, state);
-  }
-  drawVignette(ctx);
-  drawHud(ctx, state);
-  drawFieldNotes(ctx, state);
-  drawToast(ctx, state);
-
+  ctx.clearRect(0, 0, VIEW.width, VIEW.height);
   if (state.screen === SCREEN_TITLE) {
-    drawOverlay(ctx, 'THE MIDNIGHT VAULT', [
-      'JOB 1 · THE STARLIGHT VAULT',
-      'One gallery. Three wardens. Two watch-eyes. One vault.',
-      'WASD / arrows to move · 1 / 2 / 3 pick a tool · SPACE uses it',
-      '3 tosses a coin — the clink pulls the nearest warden off patrol.',
-      'Grab $1,000 of loot, then slip out the exit before dawn.',
-      'Warm lamplight is danger. Deep shadow is safety. Smoke buys seconds.',
-      '',
-      'Press ENTER or click to begin the heist',
-    ], COLORS.gold);
-  } else if (state.screen === SCREEN_WIN) {
-    const winLines = [
-      `Loot taken: ${state.stats.lootTaken} pieces · gadgets used: ${state.stats.toolsUsed}`,
-    ];
-    if (state.ghost) winLines.push('GHOST — never once spotted · +$250');
-    winLines.push('', 'Press R to run it back');
-    drawOverlay(ctx, 'CLEAN GETAWAY', winLines, COLORS.safe,
-      `HAUL $${state.winHaul.toLocaleString()} · ${Math.round(state.winTime)} SECONDS`);
+    drawFloor(ctx);
+    drawSkylightPools(ctx);
+    drawQuietCorners(ctx);
+    drawTourGroups(ctx, false, state);
+    drawMarbleEcho(ctx);
+    drawWallsAndCover(ctx);
+    drawLoot(ctx, state);
+    drawExit(ctx, state);
+    drawTourGroups(ctx, true, state);
+    drawOverlay(ctx, 'THE AURELIUS JOB', [
+      'A museum heist in daylight.',
+      'Wear the docent uniform. Lift $1,000.',
+      'Slip out the staff exit before closing.',
+    ], COLORS.goldBright, true);
+    drawHud(ctx, state);
+    return;
+  }
+  drawFloor(ctx);
+  drawPatrols(ctx, state);
+  drawSkylightPools(ctx);
+  drawQuietCorners(ctx);
+  drawTourGroups(ctx, false, state);
+  drawMarbleEcho(ctx);
+  drawNoise(ctx, state);
+  drawGuide(ctx, state);
+  drawWallsAndCover(ctx);
+  drawLoot(ctx, state);
+  drawExit(ctx, state);
+  drawCones(ctx, state);
+  drawCameras(ctx, state);
+  drawGuards(ctx, state);
+  drawThief(ctx, state);
+  drawTourGroups(ctx, true, state);
+  drawCoin(ctx, state);
+  drawSmoke(ctx, state);
+  drawDaylight(ctx);
+  drawMarginNotes(ctx);
+  drawHud(ctx, state);
+  drawToast(ctx, state);
+  if (state.screen === SCREEN_WIN) {
+    const ghost = state.ghost ? ' · CLEAN VISIT +$250' : '';
+    const secs = Math.round(state.winTime);
+    drawOverlay(ctx, 'CLEAN GETAWAY', [
+      `HAUL $${state.winHaul.toLocaleString()} · ${secs} SECONDS${ghost}`,
+      `${state.stats.lootTaken} pieces lifted · ${state.stats.toolsUsed} tools used`,
+      'The museum never knew you were there.',
+    ], COLORS.safe, false);
   } else if (state.screen === SCREEN_LOSE) {
     const why = state.caughtBy === 'alarm'
-      ? 'The alarm hit 100% — the gallery locked down around you.'
+      ? 'The alarm hit 100 — security swept the galleries.'
       : state.caughtBy === 'guard'
-        ? 'A warden grabbed you in the open. The cones were telling the truth.'
-        : 'Dawn broke over the gallery. The vault keeps its secrets.';
-    drawOverlay(ctx, 'CAUGHT', [why, '', 'Press R to run it back'], COLORS.danger);
+        ? 'A guard grabbed your arm in front of the visitors.'
+        : 'Closing time — the doors locked with you inside.';
+    drawOverlay(ctx, 'CAUGHT', [why, `Loot kept: $${state.lootValue.toLocaleString()}`, 'Press R to try the visit again.'], COLORS.danger, false);
   }
 }

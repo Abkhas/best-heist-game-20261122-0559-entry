@@ -1,88 +1,92 @@
-// The Midnight Vault — the room itself: walls, cover, shadows, loot, patrols.
-// Every route through the gallery is drawn from this one layout, so the thief
-// can always pick a loud route past the guards, a dark route through the
-// shadows, or a middle route behind the display cases.
+// The Aurelius Job — the museum itself: partitions, benches, quiet corners,
+// tour groups, marble that echoes, skylights, loot, patrols.
+// Every route through the galleries is drawn from this one layout, so the
+// thief can always pick a loud route past the guards, a shaded route through
+// the quiet corners, or a middle route behind the benches and the tour groups.
 import { PLAY } from './config.js';
 
-// Solid walls (movement + line of sight). The outer walls are the play bounds.
+// Solid partitions (movement + line of sight). The outer walls are the play bounds.
 export const WALLS = [
-  // Left partition: a doorway gap between y 364 and y 460.
+  // West partition: a doorway gap between y 364 and y 460.
   { x: 420, y: 64, w: 26, h: 300 },
   { x: 420, y: 460, w: 26, h: 260 },
-  // Right partition around the vault chamber: gap between y 480 and y 560.
+  // Crown Gallery partition: gap between y 480 and y 560.
   { x: 840, y: 180, w: 26, h: 300 },
   { x: 840, y: 560, w: 26, h: 160 },
-  // A short mid-gallery wall that splits the centre floor.
+  // A short mid-atrium partition that splits the centre floor.
   { x: 600, y: 480, w: 190, h: 26 },
 ];
 
-// Cover furniture: blocks movement and sight, hides the thief behind it.
+// Benches and plinths: block movement and sight, hide the thief behind them.
 export const COVER = [
-  { x: 170, y: 180, w: 130, h: 52, label: 'display case' },
-  { x: 170, y: 520, w: 130, h: 52, label: 'display case' },
-  { x: 540, y: 190, w: 150, h: 52, label: 'display case' },
-  { x: 540, y: 580, w: 150, h: 52, label: 'display case' },
-  { x: 950, y: 330, w: 120, h: 52, label: 'velvet sofa' },
+  { x: 170, y: 180, w: 130, h: 52, label: 'bench' },
+  { x: 170, y: 520, w: 130, h: 52, label: 'bench' },
+  { x: 540, y: 190, w: 150, h: 52, label: 'plinth' },
+  { x: 540, y: 580, w: 150, h: 52, label: 'plinth' },
+  { x: 950, y: 330, w: 120, h: 52, label: 'velvet bench' },
 ];
 
-// Pillars: round cover the thief can circle behind.
+// Columns: round cover the thief can circle behind.
 export const PILLARS = [
   { x: 640, y: 330, r: 26 },
   { x: 300, y: 400, r: 24 },
   { x: 1060, y: 470, r: 26 },
 ];
 
-// Shadow pools: dark floor where the alarm falls fast and the thief is harder to see.
+// Quiet corners: shaded floor under the mezzanine where the alarm falls fast
+// and the thief is harder to see.
 export const SHADOWS = [
   { x: 110, y: 360, w: 190, h: 130 },
   { x: 900, y: 570, w: 200, h: 130 },
   { x: 470, y: 90, w: 180, h: 90 },
 ];
 
-// Tall grass: the thief crouching in it is hidden unless a watcher is close.
-// One patch per region, each sitting just off a patrol beat so a route can
-// run through it: west wing, centre gallery, vault chamber.
+// Tour groups: a guide and visitors standing in a cluster. The thief inside
+// one blends in and is hidden unless a watcher is close. One cluster per
+// region, each sitting just off a patrol beat so a route can run through it:
+// West Wing, Centre Atrium, Crown Gallery.
 export const GRASS = [
   { x: 280, y: 440, w: 120, h: 80 },
   { x: 470, y: 340, w: 120, h: 80 },
   { x: 1030, y: 520, w: 130, h: 90 },
 ];
 
-// Creaky boards: worn floorboards that betray a walking thief. Sneak over
-// them (hold SHIFT) and they stay silent. Each strip lies across a route the
-// thief wants: the run from the gems to the vault chamber, and the vault
-// approach itself.
+// Marble echo: polished bands that betray a strolling thief. The docent
+// stroll (SHIFT) stays silent. Each band lies across a route the thief
+// wants: the run from the paintings to the Crown Gallery, and the approach
+// to the diamond case itself.
 export const CREAKY = [
   { x: 430, y: 440, w: 380, h: 28 },
   { x: 900, y: 300, w: 260, h: 28 },
 ];
 
-// Loot. Paintings and the gem case are grab-and-go; the vault needs a channel.
+// Loot. Paintings and the diamond are grab-and-go; the Crown Case needs a
+// channel to crack its glass.
 export const LOOT = [
-  { id: 'painting-a', kind: 'painting', x: 250, y: 128, value: 200, label: 'Moonlit Harbour' },
+  { id: 'painting-a', kind: 'painting', x: 250, y: 128, value: 200, label: 'Harbour at Noon' },
   { id: 'painting-b', kind: 'painting', x: 640, y: 122, value: 200, label: 'The Gilded Fox' },
-  { id: 'painting-c', kind: 'painting', x: 1000, y: 128, value: 200, label: 'Duchess in Blue' },
-  { id: 'gems', kind: 'gems', x: 640, y: 420, value: 500, label: 'Starlight Gems' },
-  { id: 'vault', kind: 'vault', x: 1140, y: 150, value: 1500, label: 'THE MIDNIGHT VAULT' },
+  { id: 'painting-c', kind: 'painting', x: 1000, y: 128, value: 200, label: 'Duchess in Gold' },
+  { id: 'gems', kind: 'gems', x: 640, y: 420, value: 500, label: 'Aurelius Diamond' },
+  { id: 'vault', kind: 'vault', x: 1140, y: 150, value: 1500, label: 'THE CROWN CASE' },
 ];
 
 // Guard patrols: waypoints each guard walks, back and forth.
 export const PATROLS = [
-  { waypoints: [[470, 300], [770, 300]], speed: 56 },   // centre gallery, east of the left wall — the beat never crosses it
-  { waypoints: [[170, 180], [170, 620]], speed: 50 },   // west wing
-  { waypoints: [[970, 250], [970, 640]], speed: 62 },   // vault chamber
+  { waypoints: [[470, 300], [770, 300]], speed: 56 },   // centre atrium, east of the west partition — the beat never crosses it
+  { waypoints: [[170, 180], [170, 620]], speed: 50 },   // West Wing
+  { waypoints: [[970, 250], [970, 640]], speed: 62 },   // Crown Gallery
 ];
 
 // Wall cameras: mounted on a wall, sweeping a cone.
 export const CAMERAS = [
-  { x: 640, y: 70, baseAngle: Math.PI / 2, label: 'EYE 1' },
-  { x: 1272, y: 380, baseAngle: Math.PI, label: 'EYE 2' },
+  { x: 640, y: 70, baseAngle: Math.PI / 2, label: 'CAM 1' },
+  { x: 1272, y: 380, baseAngle: Math.PI, label: 'CAM 2' },
 ];
 
-// The getaway door. It opens only once the loot target is met.
+// The staff exit. It opens only once the loot target is met.
 export const EXIT = { x: 1150, y: 664, w: 118, h: 48 };
 
-// Vent the thief slips in through, bottom-left.
+// The ticket desk the thief slips in through, bottom-left.
 export const ENTRANCE = { x: 40, y: 640, w: 70, h: 60 };
 
 export function allBlockers() {
@@ -97,16 +101,16 @@ export function inShadow(x, y) {
   return SHADOWS.some((s) => pointInRect(x, y, s));
 }
 
-// Wall lamps: pure light, no gameplay on their own — but standing in one's
-// pool is the most exposed place in the room. Each hangs over something the
+// Skylights: pure sun, no gameplay on their own — but standing in one's pool
+// is the most exposed place in the museum. Each hangs over something the
 // thief wants, so loot is always lit.
 export const LAMPS = [
   { x: 250, y: 128 },   // over painting A
   { x: 640, y: 122 },   // over painting B
   { x: 1000, y: 128 },  // over painting C
-  { x: 640, y: 420 },   // over the Starlight Gems
-  { x: 1140, y: 150 },  // over the vault
-  { x: 640, y: 330 },   // centre gallery
+  { x: 640, y: 420 },   // over the Aurelius Diamond
+  { x: 1140, y: 150 },  // over the Crown Case
+  { x: 640, y: 330 },   // centre atrium
   { x: 1180, y: 600 },  // over the exit approach
 ];
 
@@ -139,7 +143,7 @@ export function patrolLegs() {
   });
 }
 
-/** True when the straight line from (x1,y1) to (x2,y2) is blocked by a wall, cover or pillar. */
+/** True when the straight line from (x1,y1) to (x2,y2) is blocked by a wall, bench or column. */
 export function lineBlocked(x1, y1, x2, y2) {
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -155,7 +159,7 @@ export function lineBlocked(x1, y1, x2, y2) {
   return false;
 }
 
-/** Push a circle (x, y, radius) out of every solid rect, pillar and the play bounds. */
+/** Push a circle (x, y, radius) out of every solid rect, column and the play bounds. */
 export function resolveCircle(x, y, radius) {
   let nx = Math.max(PLAY.x + radius, Math.min(PLAY.x + PLAY.width - radius, x));
   let ny = Math.max(PLAY.y + radius, Math.min(PLAY.y + PLAY.height - radius, y));
@@ -185,9 +189,9 @@ export function resolveCircle(x, y, radius) {
   return { x: nx, y: ny };
 }
 
-/** Push a circle (x, y, radius) out of the partition walls only, so a guard
- *  can never phase through a wall on patrol or on an investigate walk.
- *  (Cover and pillars are furniture — a guard may brush them; walls are not.)
+/** Push a circle (x, y, radius) out of the partitions only, so a guard can
+ *  never phase through a wall on patrol or on an investigate walk.
+ *  (Benches and columns are furniture — a guard may brush them; walls are not.)
  *  A guard whose target lies across a wall slides along it and gives up when
  *  the investigate expires, then resumes his beat. */
 export function resolveWalls(x, y, radius) {

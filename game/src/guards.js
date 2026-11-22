@@ -1,4 +1,4 @@
-// The Midnight Vault — guards on patrol and cameras on the wall: where they
+// The Aurelius Job — guards on patrol and cameras on the wall: where they
 // look, how their cones sweep, and whether they can see the thief right now.
 import { GUARD, CAMERA, HIDING } from './config.js';
 import { PATROLS, CAMERAS, lineBlocked, inShadow, inGrass, resolveWalls } from './levels.js';
@@ -30,7 +30,7 @@ export function makeCameras() {
     baseAngle: c.baseAngle,
     label: c.label,
     t: i * 1.7,           // offset so the two cameras sweep out of phase
-    disabledUntil: 0,     // game clock; EMP sets this ahead
+    disabledUntil: 0,     // game clock; the jammer sets this ahead
     angle: c.baseAngle,
   }));
 }
@@ -44,8 +44,8 @@ function angleDiff(a, b) {
 
 /**
  * Walk toward (tx, ty) at guard speed, wall-aware: the step is pushed out of
- * the partition walls, so a guard can never phase through one on patrol or
- * on an investigate walk. Returns true on arrival.
+ * the partitions, so a guard can never phase through one on patrol or on an
+ * investigate walk. Returns true on arrival.
  */
 function walkToward(g, tx, ty, dt) {
   const dx = tx - g.x;
@@ -67,7 +67,7 @@ function walkToward(g, tx, ty, dt) {
 }
 
 /**
- * Walk one guard along its patrol. At each waypoint it stops and looks around.
+ * Walk one guard along his patrol. At each waypoint he stops and looks around.
  * A guard with an investigate target walks off patrol to look at the noise
  * instead, then resumes his beat. A guard who saw the thief hot and lost him
  * walks to where he last saw him, then resumes his beat.
@@ -89,7 +89,7 @@ export function updateGuard(g, dt, state) {
   }
   // Lost the thief after a hot sighting: go and look where he was. The
   // sighting becomes a kind-tagged investigate, so the guard walks over,
-  // looks around, then resumes his beat — the same machinery as a coin.
+  // looks around, then resumes his beat — the same machinery as a ticket.
   if (g.wasHot && g.lastSeen && state) {
     g.wasHot = false;
     g.investigate = {
@@ -132,21 +132,21 @@ function seesTarget(ox, oy, facing, range, halfAngle, tx, ty, state) {
   if (Math.abs(angleDiff(Math.atan2(dy, dx), facing)) > halfAngle) return false;
   if (lineBlocked(ox, oy, tx, ty)) return false;
   if (state.smoke && Math.hypot(tx - state.smoke.x, ty - state.smoke.y) < state.smoke.radius) {
-    return false; // the thief is inside the smoke cloud
+    return false; // the thief is inside the flash burst
   }
   return true;
 }
 
 /**
  * Who sees the thief this frame. Returns { guard: bool, camera: bool }.
- * A thief standing in shadow is spotted only at close range.
+ * A thief standing in a quiet corner is spotted only at close range.
  */
 export function detectThief(state) {
   const t = state.thief;
-  // Sight range follows the thief's cover, multiplicatively: deep shadow
-  // and tall grass each shrink it, sneaking shrinks it further. Lamplight
-  // does not widen it — the lamp is the HUD meter's business, not the
-  // cones'. A thief in both shadow and grass is very hard to spot.
+  // Sight range follows the thief's cover, multiplicatively: a quiet corner
+  // and a tour group each shrink it, the docent stroll shrinks it further.
+  // Skylight does not widen it — the sun pool is the HUD meter's business,
+  // not the cones'. A thief in both shade and a tour group is very hard to spot.
   const shadowed = inShadow(t.x, t.y);
   const grassed = inGrass(t.x, t.y);
   let factor = 1;
@@ -182,7 +182,7 @@ export function detectThief(state) {
   return { guard, camera };
 }
 
-/** A guard close enough to grab the thief ends the run at once. */
+/** A guard close enough to grab the thief ends the visit at once. */
 export function guardCaught(state) {
   const t = state.thief;
   return state.guards.some((g) => Math.hypot(g.x - t.x, g.y - t.y) < GUARD.catchRadius);
