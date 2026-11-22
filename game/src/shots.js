@@ -55,6 +55,7 @@ function autopilot(state, waypoints, seconds, useSmokeAt = -1) {
 
 // Routes avoid the patrol lines: the west wing is crossed low, the centre
 // below the gallery guard's beat, the vault chamber through the low gap.
+// The tools scene is staged, not routed: see shotTools.
 const TO_PAINTING_A = [[320, 640], [320, 420], [300, 200], [250, 128]];
 const TO_GEMS = [[320, 420], [433, 412], [560, 420], [640, 420]];
 const TO_PAINTING_C = [[780, 520], [853, 520], [1000, 300], [1075, 128]];
@@ -68,12 +69,32 @@ function shotCover(state) {
   state.alarm = Math.max(state.alarm, 42); // the night is already tense
 }
 
-/** Tools: a smoke pellet blooms as the thief crosses a guard's cone. */
+/** Tools: the coin toss mid-action — gold rings bloom at the landing spot, the
+ *  nearest guard walks over to look ("?", amber cone), the thief crouched in
+ *  the shadow pool nearby. Staged like `caught`: positions are set, then the
+ *  real useTool + stepGame play the toss and the divert forward. */
 function shotTools(state) {
-  autopilot(state, TO_PAINTING_A, 12);
-  autopilot(state, [[320, 420], [500, 300]], 8, 6);
-  state.tools.selected = 'smoke';
-  if (!state.smoke && state.tools.smoke > 0) useTool(state);
+  // Thief crouched in the west shadow pool (110,360,190,130), facing north
+  // up the gallery toward guard 0's beat, so the coin lands in the lamplight.
+  state.thief.x = 205;
+  state.thief.y = 420;
+  state.thief.facing = -Math.PI / 2;
+  // Guard 0 mid-beat on the centre line, facing east along it.
+  const g0 = state.guards[0];
+  g0.x = 420;
+  g0.y = 300;
+  g0.target = 1;
+  g0.pause = 0;
+  g0.facing = 0;
+  g0.baseFacing = 0;
+  // The real toss: the coin flies 120 px ahead and clinks down at (205, 300);
+  // guard 0 is the nearest in earshot and walks over to look at it.
+  state.tools.selected = 'coin';
+  useTool(state);
+  // Step 1.2 s: the rings are at full spread, the guard is well on his way
+  // with "?" up and an amber cone on the coin, the toast is still up, and
+  // the thief is still unseen in the dark.
+  for (let i = 0; i < 72; i += 1) stepGame(state, SAMPLE);
 }
 
 /** The getaway: vault cracked, haul over target, thief racing for the exit. */

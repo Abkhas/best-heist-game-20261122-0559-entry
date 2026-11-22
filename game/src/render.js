@@ -4,7 +4,7 @@
 // in the light. No labels say "hidden" — the light itself says it.
 import { VIEW, HUD_H, COLORS, ALARM, LOOT_TARGET, TOOLS } from './config.js';
 import {
-  WALLS, COVER, PILLARS, SHADOWS, CAMERAS, EXIT, ENTRANCE, inShadow,
+  WALLS, COVER, PILLARS, SHADOWS, CAMERAS, EXIT, ENTRANCE, PATROLS, inShadow,
 } from './levels.js';
 import { GUARD, CAMERA } from './config.js';
 import { SCREEN_TITLE, SCREEN_WIN, SCREEN_LOSE, exitOpen } from './state.js';
@@ -66,6 +66,26 @@ function drawFloor(ctx) {
     ctx.lineTo(VIEW.width, y);
   }
   ctx.stroke();
+}
+
+// Dotted patrol routes on the floor: each guard's beat, drawn so the player
+// reads where the cones will sweep before they arrive. Dots, not a solid
+// line — the floor stays floor, the beat stays a hint.
+function drawPatrols(ctx) {
+  ctx.save();
+  ctx.setLineDash([1, 11]);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(216,180,112,0.34)';
+  ctx.lineWidth = 3;
+  for (const p of PATROLS) {
+    ctx.beginPath();
+    p.waypoints.forEach(([x, y], i) => {
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // Warm pools of lamplight, laid over the floor before anything else.
@@ -132,13 +152,27 @@ function drawWallsAndCover(ctx) {
     ctx.fillRect(w.x, w.y, w.w, 1.5);
   }
   for (const c of COVER) {
-    // Dark walnut case, brass edge, warm glass glint — furniture, no label.
+    // Tall display case, a second cover layer distinct from the flat shadow
+    // pools: a plinth shadow on the floor, a raised lid catching the light,
+    // brass corner posts, and a warm glass glint — furniture you hide behind.
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    roundRect(ctx, c.x + 5, c.y + 7, c.w, c.h, 6);
+    ctx.fill();
+    // Raised lid: a lighter top band, as if the case stands taller than the floor.
+    ctx.fillStyle = '#3a2b22';
+    roundRect(ctx, c.x, c.y, c.w, 14, 6);
+    ctx.fill();
     ctx.fillStyle = '#241a16';
-    roundRect(ctx, c.x, c.y, c.w, c.h, 6);
+    roundRect(ctx, c.x, c.y + 10, c.w, c.h - 10, 6);
     ctx.fill();
     ctx.strokeStyle = '#8a6a2a';
     ctx.lineWidth = 2;
+    roundRect(ctx, c.x, c.y, c.w, c.h, 6);
     ctx.stroke();
+    // Brass corner posts at the front edge.
+    ctx.fillStyle = '#c9a24a';
+    ctx.fillRect(c.x + 2, c.y + 2, 4, c.h - 4);
+    ctx.fillRect(c.x + c.w - 6, c.y + 2, 4, c.h - 4);
     ctx.strokeStyle = 'rgba(255,205,120,0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -420,6 +454,25 @@ function drawThief(ctx, state) {
     ctx.fill();
   }
   ctx.restore();
+  // Visibility badge over the thief: what the light says about him right
+  // now — HIDDEN in the cool dark, IN LIGHT where the lamps can see him.
+  // Small, and it rides with the thief, so the concealment reads in any frame.
+  const label = hidden ? 'HIDDEN' : 'IN LIGHT';
+  ctx.save();
+  ctx.font = 'bold 11px sans-serif';
+  const w = ctx.measureText(label).width + 18;
+  const bx = t.x - w / 2;
+  const by = t.y - 34;
+  ctx.fillStyle = hidden ? 'rgba(16,24,54,0.88)' : 'rgba(54,38,12,0.88)';
+  roundRect(ctx, bx, by, w, 17, 8);
+  ctx.fill();
+  ctx.strokeStyle = hidden ? '#7fa0e0' : '#f2a33c';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.fillStyle = hidden ? '#a9c2ff' : '#f2c14e';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, t.x, by + 12.5);
+  ctx.restore();
 }
 
 // The tossed coin: a gold disc and the noise rings that pulled a guard over.
@@ -572,6 +625,7 @@ export function render(ctx, state) {
   drawFloor(ctx);
   drawLampPools(ctx);
   drawShadows(ctx);
+  drawPatrols(ctx);
   drawWallsAndCover(ctx);
   drawExit(ctx, state);
   drawLoot(ctx, state);
