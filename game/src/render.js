@@ -6,22 +6,11 @@
 // light means. Safe, danger, hidden and noise must read at a glance.
 import { VIEW, HUD_H, COLORS, ALARM, LOOT_TARGET, TOOLS } from './config.js';
 import {
-  WALLS, COVER, PILLARS, SHADOWS, CAMERAS, EXIT, ENTRANCE, PATROLS, inShadow,
+  WALLS, COVER, PILLARS, SHADOWS, GRASS, CREAKY, LAMPS, CAMERAS, EXIT, ENTRANCE,
+  inShadow, inGrass, patrolLegs,
 } from './levels.js';
 import { GUARD, CAMERA } from './config.js';
 import { SCREEN_TITLE, SCREEN_WIN, SCREEN_LOSE, exitOpen } from './state.js';
-
-// Wall lamps: pure light, no gameplay. Each one hangs over something the
-// thief wants — a painting, the gems, the vault — so loot is always lit.
-const LAMPS = [
-  { x: 250, y: 128 },   // over painting A
-  { x: 640, y: 122 },   // over painting B
-  { x: 1075, y: 128 },  // over painting C
-  { x: 640, y: 420 },   // over the Starlight Gems
-  { x: 1140, y: 150 },  // over the vault
-  { x: 640, y: 330 },   // centre gallery
-  { x: 1180, y: 600 },  // over the exit approach
-];
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -81,21 +70,53 @@ function drawFloor(ctx) {
   }
 }
 
-// Dotted patrol routes on the floor: each guard's beat, drawn so the player
-// reads where the cones will sweep before they arrive. Dots, not a solid
-// line — the floor stays floor, the beat stays a hint.
-function drawPatrols(ctx) {
+// Patrol rings: each guard's beat drawn as a dotted line, with the seconds
+// each leg takes written at its waypoints — read the timings, then move.
+// A dotted ring marks where the guard stands right now, and the dotted arcs
+// show how far each camera's cone travels.
+function drawPatrols(ctx, state) {
+  const legs = patrolLegs();
   ctx.save();
-  ctx.setLineDash([1, 11]);
+  ctx.setLineDash([2, 7]);
   ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(216,180,112,0.34)';
-  ctx.lineWidth = 3;
-  for (const p of PATROLS) {
+  state.guards.forEach((g, i) => {
+    ctx.strokeStyle = 'rgba(244,239,228,0.34)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    p.waypoints.forEach(([x, y], i) => {
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    const wps = g.waypoints;
+    ctx.moveTo(wps[0][0], wps[0][1]);
+    for (let k = 1; k < wps.length; k += 1) ctx.lineTo(wps[k][0], wps[k][1]);
+    ctx.stroke();
+    // A dotted ring where the guard stands, and seconds at each waypoint.
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, GUARD.radius + 9, 0, Math.PI * 2);
+    ctx.stroke();
+    wps.forEach(([wx, wy], k) => {
+      const secs = Math.round(legs[i][k].seconds);
+      ctx.fillStyle = 'rgba(13,10,20,0.85)';
+      ctx.beginPath();
+      ctx.arc(wx, wy, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(244,239,228,0.6)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#f4efe4';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${secs}s`, wx, wy + 3);
     });
+  });
+  ctx.restore();
+  // Camera sweep arcs: the dotted arc a camera's cone travels along.
+  ctx.save();
+  ctx.setLineDash([2, 6]);
+  ctx.strokeStyle = 'rgba(255,196,90,0.30)';
+  ctx.lineWidth = 1.5;
+  for (const cam of state.cameras) {
+    ctx.beginPath();
+    ctx.arc(cam.x, cam.y, CAMERA.range,
+      cam.baseAngle - CAMERA.sweepArc - CAMERA.halfAngle,
+      cam.baseAngle + CAMERA.sweepArc + CAMERA.halfAngle);
     ctx.stroke();
   }
   ctx.restore();
@@ -167,6 +188,134 @@ function drawShadows(ctx) {
     ctx.arc(s.x + s.w * 0.5, s.y + s.h * 0.25, 1.4, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+// Deterministic 2D hash: the same (x, y) always gives the same value, so
+// the same frame always draws the same floor.
+function hash2(x, y) {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = (h ^ (h >> 13)) | 0;
+  h = Math.imul(h, 1274126177);
+  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+}
+
+// Tall grass: clusters of ink-green blades. Crouch in it and a watcher has
+// to be close to spot you. Blades are placed from the hash, never at random.
+// The foreground pass draws only the blades right over the thief, so a thief
+// in the grass reads as half-hidden.
+function drawGrass(ctx, foreground, state) {
+  for (const g of GRASS) {
+    const blades = Math.floor((g.w * g.h) / 260);
+    for (let i = 0; i < blades; i += 1) {
+      const bx = g.x + 6 + hash2(i, 11) * (g.w - 12);
+      const by = g.y + 8 + hash2(i, 23) * (g.h - 16);
+      if (foreground) {
+        const t = state.thief;
+        if (Math.hypot(bx - t.x, by - t.y) > 46) continue;
+      }
+      const h = 14 + hash2(i, 37) * 16;
+      const sway = foreground ? 0 : Math.sin(state.time * 1.4 + i) * 1.5;
+      ctx.strokeStyle = foreground
+        ? 'rgba(74,160,90,0.85)' : 'rgba(46,110,58,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(bx + sway, by - h * 0.6, bx + sway * 2, by - h);
+      ctx.stroke();
+    }
+  }
+}
+
+// Creaky boards: worn, lighter planks across a route, with a small ink
+// label so the risk reads before you step on them.
+function drawCreaky(ctx) {
+  for (const c of CREAKY) {
+    ctx.fillStyle = 'rgba(214,164,96,0.16)';
+    ctx.fillRect(c.x, c.y, c.w, c.h);
+    ctx.strokeStyle = 'rgba(214,164,96,0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(c.x, c.y, c.w, c.h);
+    ctx.strokeStyle = 'rgba(214,164,96,0.30)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = c.x + 26; x < c.x + c.w; x += 26) {
+      ctx.moveTo(x, c.y + 3);
+      ctx.lineTo(x, c.y + c.h - 3);
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(232,196,130,0.75)';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('CREAKY BOARDS', c.x + 8, c.y + c.h / 2 + 3);
+  }
+}
+
+// The latest loud sound, drawn as expanding rings so the noise itself is seen.
+function drawNoise(ctx, state) {
+  if (!state.noise) return;
+  const n = state.noise;
+  const age = state.time - (n.until - 0.9);
+  const ringR = 12 + Math.min(1, age / 0.9) * 46;
+  const alpha = Math.max(0, 0.7 - age * 0.6);
+  ctx.strokeStyle = `rgba(242,163,60,${alpha})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(242,163,60,${alpha * 0.5})`;
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, ringR * 0.6, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+// The parchment FIELD NOTES legend: the thief's own crib sheet — what the
+// light means, what the grass and the boards do, the keys that matter.
+// H toggles it; it defaults OFF in live play, and the screenshots show it
+// on. A small panel low on the west wall: it covers the west shadow pool
+// and the entrance corner while open, which is why it defaults off.
+function drawFieldNotes(ctx, state) {
+  if (!state.fieldNotes) return;
+  const x = 16;
+  const y = 440;
+  const w = 300;
+  const h = 200;
+  ctx.save();
+  ctx.fillStyle = 'rgba(232,217,168,0.94)';
+  roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = '#2a2118';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#2a2118';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('FIELD NOTES', x + 12, y + 20);
+  ctx.strokeStyle = '#2a2118';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + 12, y + 26);
+  ctx.lineTo(x + w - 12, y + 26);
+  ctx.stroke();
+  const rows = [
+    ['Guard + vision cone — what they see', '#e5484d'],
+    ['Blind spot behind cover — safe', '#2a2118'],
+    ['Lamplight — seen from across the room', '#c8862a'],
+    ['Tall grass — hidden unless close', '#2e6e3a'],
+    ['Creaky boards — loud unless you sneak', '#8a6a2a'],
+    ['Rings — patrol paths, seconds on each leg', '#5a4a6a'],
+    ['Exit hatch — opens once you hold the prize', '#0e6e3a'],
+  ];
+  ctx.font = '11px sans-serif';
+  rows.forEach(([text, color], i) => {
+    const ry = y + 44 + i * 20;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x + 18, ry - 3, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2a2118';
+    ctx.fillText(text, x + 28, ry);
+  });
+  ctx.restore();
 }
 
 function drawWallsAndCover(ctx) {
@@ -427,8 +576,26 @@ function drawExit(ctx, state) {
   ctx.fillStyle = open ? COLORS.safe : '#a08a8a';
   ctx.font = open ? 'bold 16px sans-serif' : 'bold 13px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(open ? 'EXIT — GO!' : 'EXIT · NEED $1,000', 0, 6);
+  ctx.fillText(open ? 'EXIT — GO!' : 'EXIT — LOCKED', 0, 6);
   ctx.restore();
+  if (!open) {
+    // The padlock over the door, and the price of opening it. The lock
+    // rides above the text so the two never overlap.
+    ctx.save();
+    ctx.translate(EXIT.x + EXIT.w / 2, EXIT.y + EXIT.h / 2);
+    ctx.fillStyle = '#f2c14e';
+    ctx.fillRect(-6, -16, 12, 10);
+    ctx.strokeStyle = '#f2c14e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -6, 5, Math.PI, 0);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(232,220,192,0.85)';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`HATCH LOCKED — NEED $${LOOT_TARGET.toLocaleString()}`, EXIT.x + EXIT.w, EXIT.y - 8);
+  }
   // The vent the thief slipped in through, a dark grate low on the wall.
   ctx.fillStyle = '#0c0a12';
   ctx.fillRect(ENTRANCE.x, ENTRANCE.y, ENTRANCE.w, ENTRANCE.h);
@@ -556,6 +723,32 @@ function drawGuards(ctx, state) {
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('?', g.x, g.y - GUARD.radius - 8);
+      // The graduated investigation, out loud: what he heard, and a dotted
+      // thread from him to the spot he is walking over to check.
+      const label = g.investigate.kind === 'coin' ? 'What was that?'
+        : g.investigate.kind === 'creak' ? 'What was that?'
+          : 'Thought I saw something…';
+      ctx.save();
+      ctx.font = 'bold 12px sans-serif';
+      const w = ctx.measureText(label).width + 18;
+      const bx = Math.max(8, Math.min(VIEW.width - w - 8, g.x - w / 2));
+      const by = g.y - GUARD.radius - 44;
+      ctx.fillStyle = 'rgba(244,239,228,0.95)';
+      roundRect(ctx, bx, by, w, 24, 6);
+      ctx.fill();
+      ctx.fillStyle = '#2a2118';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, bx + w / 2, by + 17);
+      ctx.restore();
+      ctx.save();
+      ctx.setLineDash([3, 6]);
+      ctx.strokeStyle = 'rgba(242,163,60,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(g.x, g.y);
+      ctx.lineTo(g.investigate.x, g.investigate.y);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 }
@@ -613,21 +806,28 @@ function drawThief(ctx, state) {
   }
   ctx.restore();
   // Visibility badge over the thief: what the light says about him right
-  // now — HIDDEN in the cool dark, IN LIGHT where the lamps can see him.
-  // Small, and it rides with the thief, so the concealment reads in any frame.
-  const label = hidden ? 'HIDDEN' : 'IN LIGHT';
+  // now — HIDDEN in shadow or grass, DIM on the open floor, EXPOSED under
+  // a lamp. Small, and it rides with the thief, so the concealment reads
+  // in any frame.
+  const v = state.visibility;
+  const label = v >= 0.8 ? 'EXPOSED' : v >= 0.4 ? 'DIM' : 'HIDDEN';
+  const badge = label === 'HIDDEN'
+    ? ['rgba(16,24,54,0.88)', '#7fa0e0', '#a9c2ff']
+    : label === 'EXPOSED'
+      ? ['rgba(54,38,12,0.88)', '#f2a33c', '#f2c14e']
+      : ['rgba(40,32,20,0.88)', '#c9a24a', '#d8c08a'];
   ctx.save();
   ctx.font = 'bold 11px sans-serif';
   const w = ctx.measureText(label).width + 18;
   const bx = t.x - w / 2;
   const by = t.y - 34;
-  ctx.fillStyle = hidden ? 'rgba(16,24,54,0.88)' : 'rgba(54,38,12,0.88)';
+  ctx.fillStyle = badge[0];
   roundRect(ctx, bx, by, w, 17, 8);
   ctx.fill();
-  ctx.strokeStyle = hidden ? '#7fa0e0' : '#f2a33c';
+  ctx.strokeStyle = badge[1];
   ctx.lineWidth = 1.2;
   ctx.stroke();
-  ctx.fillStyle = hidden ? '#a9c2ff' : '#f2c14e';
+  ctx.fillStyle = badge[2];
   ctx.textAlign = 'center';
   ctx.fillText(label, t.x, by + 12.5);
   ctx.restore();
@@ -721,9 +921,28 @@ function drawHud(ctx, state) {
   ctx.font = 'bold 22px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('THE MIDNIGHT VAULT', 54, 28);
+  // SHADOW meter: how exposed the thief is right now — the visibility the
+  // watchers see, at a glance. Deep shadow and tall grass empty it, a lamp
+  // pool fills it, sneaking lowers it. (The job is named on the title screen
+  // and in the field notes instead.)
+  const v = state.visibility;
+  const vWord = v >= 0.8 ? 'EXPOSED' : v >= 0.4 ? 'DIM' : 'HIDDEN';
+  const vColor = v >= 0.8 ? COLORS.danger : v >= 0.4 ? '#f2a33c' : COLORS.safe;
+  ctx.fillStyle = vColor;
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('SHADOW', 54, 42);
+  ctx.fillStyle = '#2a2438';
+  ctx.fillRect(54, 46, 130, 10);
+  ctx.fillStyle = vColor;
+  ctx.fillRect(54, 46, 130 * v, 10);
   ctx.fillStyle = COLORS.muted;
-  ctx.font = '12px sans-serif';
-  ctx.fillText('JOB 1 · THE STARLIGHT VAULT', 54, 50);
+  ctx.font = '11px sans-serif';
+  ctx.fillText(`${vWord} · ${Math.round(v * 100)}%`, 192, 50);
+  if (state.sneaking) {
+    ctx.fillStyle = '#8fd0ff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('SNEAKING', 310, 50);
+  }
 
   // Loot tally.
   ctx.fillStyle = COLORS.text;
@@ -853,55 +1072,35 @@ function drawInkNotes(ctx) {
   ctx.restore();
 }
 
-// When a warden walks off to look at the tossed coin, say so on a
-// parchment tag above him — the benchmark's "? HEARD THE PEBBLE" beat,
-// in our own words. Drawn only while a guard is actually investigating.
-function drawInvestigateTag(ctx, state) {
-  for (const g of state.guards) {
-    if (!g.investigate) continue;
-    const text = 'HEARD THE COIN — off to look';
-    ctx.save();
-    ctx.font = 'bold 11px sans-serif';
-    const w = ctx.measureText(text).width + 18;
-    const bx = g.x - w / 2;
-    const by = g.y - GUARD.radius - 30;
-    ctx.fillStyle = 'rgba(232,220,192,0.94)';
-    roundRect(ctx, bx, by, w, 18, 5);
-    ctx.fill();
-    ctx.strokeStyle = '#7a5c2e';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = '#2a2118';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, g.x, by + 12.5);
-    ctx.restore();
-  }
-}
-
 export function render(ctx, state) {
   drawFloor(ctx);
   drawLampPools(ctx);
   drawShadows(ctx);
-  drawPatrols(ctx);
+  drawGrass(ctx, false, state);
+  drawCreaky(ctx);
   drawInkNotes(ctx);
   drawWallsAndCover(ctx);
+  drawPatrols(ctx, state);
   drawExit(ctx, state);
   drawLoot(ctx, state);
   if (state.screen !== SCREEN_TITLE) {
     drawCones(ctx, state);
     drawCameras(ctx, state);
     drawGuards(ctx, state);
-    drawInvestigateTag(ctx, state);
     drawThief(ctx, state);
+    if (inGrass(state.thief.x, state.thief.y)) drawGrass(ctx, true, state);
     drawCoin(ctx, state);
     drawSmoke(ctx, state);
+    drawNoise(ctx, state);
   }
   drawVignette(ctx);
   drawHud(ctx, state);
+  drawFieldNotes(ctx, state);
   drawToast(ctx, state);
 
   if (state.screen === SCREEN_TITLE) {
     drawOverlay(ctx, 'THE MIDNIGHT VAULT', [
+      'JOB 1 · THE STARLIGHT VAULT',
       'One gallery. Three wardens. Two watch-eyes. One vault.',
       'WASD / arrows to move · 1 / 2 / 3 pick a tool · SPACE uses it',
       '3 tosses a coin — the clink pulls the nearest warden off patrol.',
@@ -911,11 +1110,13 @@ export function render(ctx, state) {
       'Press ENTER or click to begin the heist',
     ], COLORS.gold);
   } else if (state.screen === SCREEN_WIN) {
-    drawOverlay(ctx, 'CLEAN GETAWAY', [
+    const winLines = [
       `Loot taken: ${state.stats.lootTaken} pieces · gadgets used: ${state.stats.toolsUsed}`,
-      '',
-      'Press R to run it back',
-    ], COLORS.safe, `HAUL $${state.winHaul.toLocaleString()} · ${Math.round(state.winTime)} SECONDS`);
+    ];
+    if (state.ghost) winLines.push('GHOST — never once spotted · +$250');
+    winLines.push('', 'Press R to run it back');
+    drawOverlay(ctx, 'CLEAN GETAWAY', winLines, COLORS.safe,
+      `HAUL $${state.winHaul.toLocaleString()} · ${Math.round(state.winTime)} SECONDS`);
   } else if (state.screen === SCREEN_LOSE) {
     const why = state.caughtBy === 'alarm'
       ? 'The alarm hit 100% — the gallery locked down around you.'

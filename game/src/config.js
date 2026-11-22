@@ -8,8 +8,25 @@ export const THIEF = {
   radius: 13,
   speed: 175,          // px per second on open floor
   shadowSpeed: 205,    // faster when slipping through the dark
+  sneakSpeed: 95,      // slow and silent: no creak, half as easy to spot
   startX: 84,
   startY: 664,
+};
+
+// How much each kind of cover shrinks a watcher's sight range.
+export const HIDING = {
+  shadow: 0.55,        // deep shadow
+  grass: 0.45,         // tall grass: hidden unless a watcher is close
+  sneak: 0.6,          // moving at a crouch, on top of the above
+  lamplight: 1.0,      // standing in a lamp pool: seen from across the room
+};
+
+// Creaky boards: walking over them (not sneaking) is loud enough to pull
+// the nearest guard over to look. Noise carries this far.
+export const CREAKY = {
+  hearRadius: 380,
+  investigateSeconds: 4,
+  cooldownSeconds: 0.9, // at most one creak pulse this often
 };
 
 export const GUARD = {
