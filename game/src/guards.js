@@ -1,7 +1,7 @@
 // The Midnight Vault — guards on patrol and cameras on the wall: where they
 // look, how their cones sweep, and whether they can see the thief right now.
-import { GUARD, CAMERA } from './config.js';
-import { PATROLS, CAMERAS, lineBlocked, inShadow } from './levels.js';
+import { GUARD, CAMERA, HIDING } from './config.js';
+import { PATROLS, CAMERAS, lineBlocked, inShadow, inGrass } from './levels.js';
 
 export function makeGuards() {
   return PATROLS.map((p, i) => ({
@@ -15,7 +15,10 @@ export function makeGuards() {
     pause: 0,             // seconds left paused at a waypoint
     sweepT: 0,            // sweep clock while paused
     alert: 0,            // 0..1, how hot this guard is (drives cone colour)
-    investigate: null,   // { x, y, until } while a tossed coin holds his attention
+    investigate: null,   // { x, y, until, kind } while a noise holds his attention
+    lastSeen: null,      // { x, y } where this guard last saw the thief
+    wasHot: false,       // saw the thief hot this frame, then lost him
+    seenFrames: 0,       // consecutive frames this guard has seen the thief
   }));
 }
 
@@ -60,7 +63,9 @@ function walkToward(g, tx, ty, dt) {
 /**
  * Walk one guard along its patrol. At each waypoint it stops and looks around.
  * A guard with an investigate target walks off patrol to look at the noise
- * instead, then resumes his beat.
+ * instead, then resumes his beat. A guard who saw the thief and then lost
+ * him walks to where he last saw the thief — a graduated "What was that?"
+ * instead of an instant grab.
  */
 export function updateGuard(g, dt, state) {
   if (g.investigate) {
@@ -70,12 +75,21 @@ export function updateGuard(g, dt, state) {
       const arrived = walkToward(g, g.investigate.x, g.investigate.y, dt);
       if (arrived) {
         g.investigate = null;
-        g.pause = 0.8; // look around at the spot where the coin clinked
+        g.pause = 0.8; // look around at the spot where the noise came from
         g.sweepT = 0;
         g.baseFacing = g.facing;
       }
       return;
     }
+  }
+  // Lost the thief after a hot sighting: go and look where he was.
+  if (g.wasHot && g.lastSeen && state) {
+    g.wasHot = false;
+    g.investigate = {
+      x: g.lastSeen.x, y: g.lastSeen.y,
+      until: state.time + 5, kind: 'sighting',
+    };
+    return;
   }
   if (g.pause > 0) {
     g.pause -= dt;
@@ -118,25 +132,41 @@ function seesTarget(ox, oy, facing, range, halfAngle, tx, ty, state) {
 
 /**
  * Who sees the thief this frame. Returns { guard: bool, camera: bool }.
- * A thief standing in shadow is spotted only at close range.
+ * A thief in shadow or tall grass is spotted only at close range, and a
+ * thief sneaking is harder still; a thief standing in lamplight is seen
+ * from across the room. A guard who sees the thief remembers where.
  */
 export function detectThief(state) {
   const t = state.thief;
   const shadowed = inShadow(t.x, t.y);
+  const grassed = inGrass(t.x, t.y);
+  let factor = 1;
+  if (shadowed) factor *= HIDING.shadow;
+  if (grassed) factor *= HIDING.grass;
+  if (state.sneaking) factor *= HIDING.sneak;
   let guard = false;
   let camera = false;
   for (const g of state.guards) {
-    const range = shadowed ? GUARD.coneRange * 0.55 : GUARD.coneRange;
+    const range = GUARD.coneRange * factor;
     if (seesTarget(g.x, g.y, g.facing, range, GUARD.coneHalfAngle, t.x, t.y, state)) {
       guard = true;
       g.alert = Math.min(1, g.alert + 0.12);
+      g.lastSeen = { x: t.x, y: t.y };
+      g.seenFrames += 1;
     } else {
+      // Hot, sustained, and then lost: the guard goes and looks where he
+      // last saw you. A brief sweep graze (under 45 frames, 0.75s) only
+      // raises his alert — it never pulls him off his beat.
+      if (g.alert > 0.5 && g.lastSeen && !g.investigate && g.seenFrames >= 45) {
+        g.wasHot = true;
+      }
+      g.seenFrames = 0;
       g.alert = Math.max(0, g.alert - 0.05);
     }
   }
   for (const cam of state.cameras) {
     if (state.time >= cam.disabledUntil) {
-      const range = shadowed ? CAMERA.range * 0.55 : CAMERA.range;
+      const range = CAMERA.range * factor;
       if (seesTarget(cam.x, cam.y, cam.angle, range, CAMERA.halfAngle, t.x, t.y, state)) {
         camera = true;
       }

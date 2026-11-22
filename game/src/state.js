@@ -1,9 +1,9 @@
 // The Midnight Vault — the run's state: the thief, the alarm, the loot, the
 // tools, and what ends the night in a win or a pair of handcuffs.
 import {
-  THIEF, ALARM, TOOLS, COIN, VAULT_CHANNEL_SECONDS, LOOT_TARGET, TIME_LIMIT_SECONDS,
+  THIEF, ALARM, TOOLS, COIN, CREAKY, HIDING, VAULT_CHANNEL_SECONDS, LOOT_TARGET, TIME_LIMIT_SECONDS,
 } from './config.js';
-import { LOOT, EXIT, inShadow, resolveCircle } from './levels.js';
+import { LOOT, EXIT, inShadow, inGrass, inLamplight, onCreaky, resolveCircle } from './levels.js';
 import { makeGuards, makeCameras, updateGuard, updateCamera, detectThief, guardCaught } from './guards.js';
 
 export const SCREEN_TITLE = 'title';
@@ -17,6 +17,11 @@ export function createState() {
     time: 0,                 // seconds since the run started
     timeLeft: TIME_LIMIT_SECONDS,
     thief: { x: THIEF.startX, y: THIEF.startY, moving: false, facing: 0 },
+    sneaking: false,         // SHIFT held: slow, silent on creaky boards
+    visibility: 0.55,        // 0..1 how exposed the thief is right now
+    fieldNotes: false,       // H toggles the parchment field-notes legend
+    noise: null,             // { x, y, until } latest loud sound, drawn as rings
+    lastCreak: -10,          // game clock of the last creaky-board pulse
     guards: makeGuards(),
     cameras: makeCameras(),
     loot: LOOT.map((l) => ({ ...l, taken: false })),
@@ -34,6 +39,7 @@ export function createState() {
     caughtBy: '',            // 'alarm' | 'guard' | 'dawn'
     winHaul: 0,
     winTime: 0,
+    ghost: false,            // won without ever being spotted: Ghost Bonus
     stats: { spottedSeconds: 0, toolsUsed: 0, lootTaken: 0 },
   };
 }
@@ -54,7 +60,9 @@ export function moveThief(state, dx, dy, dt) {
   const t = state.thief;
   const len = Math.hypot(dx, dy);
   if (len < 0.01) { t.moving = false; return; }
-  const speed = inShadow(t.x, t.y) ? THIEF.shadowSpeed : THIEF.speed;
+  // Sneak is slow and silent; shadow is fast; open floor is in between.
+  const speed = state.sneaking ? THIEF.sneakSpeed
+    : inShadow(t.x, t.y) ? THIEF.shadowSpeed : THIEF.speed;
   const nx = t.x + (dx / len) * speed * dt;
   const ny = t.y + (dy / len) * speed * dt;
   const fixed = resolveCircle(nx, ny, THIEF.radius);
@@ -152,10 +160,44 @@ export function stepGame(state, dt) {
       if (d < nd) { nd = d; nearest = g; }
     }
     if (nearest && nd <= COIN.investigateRadius) {
-      nearest.investigate = { x: state.coin.x, y: state.coin.y, until: state.coin.until };
+      nearest.investigate = { x: state.coin.x, y: state.coin.y, until: state.coin.until, kind: 'coin' };
       state.coin.claimed = true;
+      toast(state, '? HEARD THE COIN — off to look', 2.6);
     }
   }
+  // Creaky boards betray a walking thief: a loud pulse pulls the nearest
+  // guard over to look. Sneaking across them stays silent.
+  const t0 = state.thief;
+  if (t0.moving && !state.sneaking && onCreaky(t0.x, t0.y)
+    && state.time - state.lastCreak >= CREAKY.cooldownSeconds) {
+    state.lastCreak = state.time;
+    state.noise = { x: t0.x, y: t0.y, until: state.time + 0.9 };
+    let nearest = null;
+    let nd = Infinity;
+    for (const g of state.guards) {
+      const d = Math.hypot(g.x - t0.x, g.y - t0.y);
+      if (d < nd) { nd = d; nearest = g; }
+    }
+    if (nearest && nd <= CREAKY.hearRadius && !nearest.investigate) {
+      nearest.investigate = {
+        x: t0.x, y: t0.y,
+        until: state.time + CREAKY.investigateSeconds, kind: 'creak',
+      };
+      toast(state, 'Creaky boards! A guard heard you — sneak (SHIFT) next time', 2.6);
+    }
+  }
+  if (state.noise && state.time >= state.noise.until) state.noise = null;
+
+  // How exposed the thief is right now: lamplight 1.0, open floor 0.55,
+  // shadow 0.15, tall grass 0.2, sneaking multiplies it down. The SHADOW
+  // meter in the HUD reads this number.
+  let vis = 0.55;
+  if (inLamplight(t0.x, t0.y)) vis = 1.0;
+  else if (inShadow(t0.x, t0.y)) vis = 0.15;
+  else if (inGrass(t0.x, t0.y)) vis = 0.2;
+  if (state.sneaking) vis *= HIDING.sneak;
+  state.visibility = vis;
+
   for (const g of state.guards) updateGuard(g, dt, state);
   for (const cam of state.cameras) updateCamera(cam, dt);
   if (state.smoke && state.time >= state.smoke.until) state.smoke = null;
@@ -197,6 +239,9 @@ export function stepGame(state, dt) {
     state.screen = SCREEN_WIN;
     state.winHaul = state.lootValue;
     state.winTime = state.time;
+    // Never once spotted: the Ghost Bonus pays for a clean night.
+    state.ghost = state.stats.spottedSeconds < 2;
+    if (state.ghost) state.winHaul += 250;
   }
 }
 
