@@ -1,5 +1,5 @@
-// The Midnight Vault — keyboard and mouse: WASD/arrows to move, 1/2 to pick a
-// tool, Space (or click) to use it, Enter to start, R to run it back.
+// The Midnight Vault — keyboard and mouse: WASD/arrows to move, 1/2/3 to pick
+// a tool, Space (or click) to use it, Enter to start, R to run it back.
 export function createInput(onAction) {
   const keys = new Set();
   const state = { mouseX: 0, mouseY: 0, mouseDown: false };
@@ -18,6 +18,7 @@ export function createInput(onAction) {
     if (k === ' ' || k === 'Enter') onAction(k === ' ' ? 'use' : 'start');
     if (k === '1') onAction('tool-smoke');
     if (k === '2') onAction('tool-emp');
+    if (k === '3') onAction('tool-coin');
     if (k === 'r') onAction('restart');
     if (k === 'm') onAction('mute');
   });

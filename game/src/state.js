@@ -1,7 +1,7 @@
 // The Midnight Vault — the run's state: the thief, the alarm, the loot, the
 // tools, and what ends the night in a win or a pair of handcuffs.
 import {
-  THIEF, ALARM, TOOLS, VAULT_CHANNEL_SECONDS, LOOT_TARGET, TIME_LIMIT_SECONDS,
+  THIEF, ALARM, TOOLS, COIN, VAULT_CHANNEL_SECONDS, LOOT_TARGET, TIME_LIMIT_SECONDS,
 } from './config.js';
 import { LOOT, EXIT, inShadow, resolveCircle } from './levels.js';
 import { makeGuards, makeCameras, updateGuard, updateCamera, detectThief, guardCaught } from './guards.js';
@@ -16,7 +16,7 @@ export function createState() {
     screen: SCREEN_TITLE,
     time: 0,                 // seconds since the run started
     timeLeft: TIME_LIMIT_SECONDS,
-    thief: { x: THIEF.startX, y: THIEF.startY, moving: false },
+    thief: { x: THIEF.startX, y: THIEF.startY, moving: false, facing: 0 },
     guards: makeGuards(),
     cameras: makeCameras(),
     loot: LOOT.map((l) => ({ ...l, taken: false })),
@@ -25,7 +25,8 @@ export function createState() {
     seen: false,             // any watcher sees the thief this frame
     seenBy: 'none',          // 'guard' | 'camera' | 'none'
     smoke: null,             // { x, y, radius, until } or null
-    tools: { smoke: TOOLS.smoke.count, emp: TOOLS.emp.count, selected: 'smoke' },
+    coin: null,              // { x, y, until, landedAt } or null
+    tools: { smoke: TOOLS.smoke.count, emp: TOOLS.emp.count, coin: TOOLS.coin.count, selected: 'smoke' },
     vaultProgress: 0,        // 0..1 channel on the vault
     vaultOpen: false,
     message: '',             // one-line toast shown over the room
@@ -60,6 +61,7 @@ export function moveThief(state, dx, dy, dt) {
   t.x = fixed.x;
   t.y = fixed.y;
   t.moving = true;
+  t.facing = Math.atan2(dy, dx); // where the thief last walked: the coin flies this way
 }
 
 /** Use the selected tool where the thief stands. */
@@ -74,6 +76,19 @@ export function useTool(state) {
     };
     state.stats.toolsUsed += 1;
     toast(state, 'Smoke out — slip past while they cannot see');
+  } else if (state.tools.selected === 'coin') {
+    if (state.tools.coin <= 0) { toast(state, 'No coins left'); return; }
+    state.tools.coin -= 1;
+    // The coin flies ahead of the thief and clinks on the floor; the
+    // nearest guard in earshot walks over to look at it.
+    const land = resolveCircle(
+      state.thief.x + Math.cos(state.thief.facing) * COIN.throwDistance,
+      state.thief.y + Math.sin(state.thief.facing) * COIN.throwDistance,
+      6,
+    );
+    state.coin = { x: land.x, y: land.y, until: state.time + COIN.investigateSeconds, landedAt: state.time };
+    state.stats.toolsUsed += 1;
+    toast(state, 'Coin tossed — a guard goes to look');
   } else {
     if (state.tools.emp <= 0) { toast(state, 'EMP charges spent'); return; }
     state.tools.emp -= 1;
@@ -126,7 +141,22 @@ export function stepGame(state, dt) {
     return;
   }
 
-  for (const g of state.guards) updateGuard(g, dt);
+  // A live coin pulls the nearest guard in earshot off patrol to look.
+  // One coin, one guard: once claimed, the coin holds no one else.
+  if (state.coin && state.time >= state.coin.until) state.coin = null;
+  if (state.coin && !state.coin.claimed) {
+    let nearest = null;
+    let nd = Infinity;
+    for (const g of state.guards) {
+      const d = Math.hypot(g.x - state.coin.x, g.y - state.coin.y);
+      if (d < nd) { nd = d; nearest = g; }
+    }
+    if (nearest && nd <= COIN.investigateRadius) {
+      nearest.investigate = { x: state.coin.x, y: state.coin.y, until: state.coin.until };
+      state.coin.claimed = true;
+    }
+  }
+  for (const g of state.guards) updateGuard(g, dt, state);
   for (const cam of state.cameras) updateCamera(cam, dt);
   if (state.smoke && state.time >= state.smoke.until) state.smoke = null;
 

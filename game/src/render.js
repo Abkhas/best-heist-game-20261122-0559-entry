@@ -1,12 +1,25 @@
-// The Midnight Vault — everything the eye sees: the gallery at night, the
-// sweeping cones, the loot glowing gold, the HUD, and the title/win/lose
-// screens. Danger is red, safety is dark, loot is gold — readable at a glance.
+// The Midnight Vault — everything the eye sees, lamplight-noir edition.
+// One grand gallery at night, lit by warm lamps: gold pools of lamplight are
+// where you are seen, deep shadow is where you vanish, and loot glints warm
+// in the light. No labels say "hidden" — the light itself says it.
 import { VIEW, HUD_H, COLORS, ALARM, LOOT_TARGET, TOOLS } from './config.js';
 import {
   WALLS, COVER, PILLARS, SHADOWS, CAMERAS, EXIT, ENTRANCE, inShadow,
 } from './levels.js';
 import { GUARD, CAMERA } from './config.js';
 import { SCREEN_TITLE, SCREEN_WIN, SCREEN_LOSE, exitOpen } from './state.js';
+
+// Wall lamps: pure light, no gameplay. Each one hangs over something the
+// thief wants — a painting, the gems, the vault — so loot is always lit.
+const LAMPS = [
+  { x: 250, y: 128 },   // over painting A
+  { x: 640, y: 122 },   // over painting B
+  { x: 1075, y: 128 },  // over painting C
+  { x: 640, y: 420 },   // over the Starlight Gems
+  { x: 1140, y: 150 },  // over the vault
+  { x: 640, y: 330 },   // centre gallery
+  { x: 1180, y: 600 },  // over the exit approach
+];
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -28,71 +41,138 @@ function drawCone(ctx, x, y, facing, range, halfAngle, fill) {
 }
 
 function drawFloor(ctx) {
-  ctx.fillStyle = COLORS.floor;
+  // Near-black warm floor: dark plum-brown, not navy. Faint large tiles.
+  ctx.fillStyle = '#171019';
   ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
-  // Checkerboard marble, faint, so the room reads as one grand floor.
   const tile = 80;
-  ctx.fillStyle = COLORS.floorAlt;
   for (let y = HUD_H; y < VIEW.height; y += tile) {
     for (let x = 0; x < VIEW.width; x += tile) {
-      if (((x / tile) + (y / tile)) % 2 === 0) ctx.fillRect(x, y, tile, tile);
+      if (((x / tile) + (y / tile)) % 2 === 0) {
+        ctx.fillStyle = '#1b141d';
+        ctx.fillRect(x, y, tile, tile);
+      }
     }
   }
-  // Moonlight through the skylight: a soft pale wash across the centre.
-  const g = ctx.createRadialGradient(640, 380, 60, 640, 380, 520);
-  g.addColorStop(0, 'rgba(190,205,255,0.10)');
-  g.addColorStop(1, 'rgba(190,205,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
+  // Thin warm grout lines, barely there.
+  ctx.strokeStyle = 'rgba(255,190,110,0.045)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= VIEW.width; x += tile) {
+    ctx.moveTo(x, HUD_H);
+    ctx.lineTo(x, VIEW.height);
+  }
+  for (let y = HUD_H; y <= VIEW.height; y += tile) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(VIEW.width, y);
+  }
+  ctx.stroke();
 }
 
+// Warm pools of lamplight, laid over the floor before anything else.
+function drawLampPools(ctx) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const lamp of LAMPS) {
+    const g = ctx.createRadialGradient(lamp.x, lamp.y, 10, lamp.x, lamp.y, 200);
+    g.addColorStop(0, 'rgba(255,178,72,0.30)');
+    g.addColorStop(0.45, 'rgba(255,160,60,0.14)');
+    g.addColorStop(1, 'rgba(255,160,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y, 200, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  // The lamp fixtures themselves: small brass sconces with a hot core.
+  for (const lamp of LAMPS) {
+    ctx.fillStyle = '#8a6a2a';
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y - 6, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd98a';
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y - 6, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Shadow pools: pools of near-black with a soft feathered edge and a faint
+// cool rim, so the eye reads "dark you can stand in" without any text.
 function drawShadows(ctx) {
   for (const s of SHADOWS) {
-    ctx.fillStyle = COLORS.shadow;
-    roundRect(ctx, s.x, s.y, s.w, s.h, 18);
+    ctx.save();
+    ctx.shadowColor = 'rgba(2,3,8,0.9)';
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = 'rgba(3,4,10,0.88)';
+    roundRect(ctx, s.x, s.y, s.w, s.h, 20);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(57,217,138,0.35)';
-    ctx.setLineDash([6, 6]);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(140,165,255,0.14)';
     ctx.lineWidth = 1.5;
-    roundRect(ctx, s.x, s.y, s.w, s.h, 18);
+    roundRect(ctx, s.x, s.y, s.w, s.h, 20);
     ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(57,217,138,0.8)';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('SHADOW — HIDDEN', s.x + s.w / 2, s.y + 16);
+    // A couple of faint dust motes inside the dark, so the pool has texture.
+    ctx.fillStyle = 'rgba(160,180,255,0.10)';
+    ctx.beginPath();
+    ctx.arc(s.x + s.w * 0.3, s.y + s.h * 0.4, 2, 0, Math.PI * 2);
+    ctx.arc(s.x + s.w * 0.65, s.y + s.h * 0.6, 1.6, 0, Math.PI * 2);
+    ctx.arc(s.x + s.w * 0.5, s.y + s.h * 0.25, 1.4, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
 function drawWallsAndCover(ctx) {
   for (const w of WALLS) {
-    ctx.fillStyle = COLORS.wall;
+    ctx.fillStyle = '#2c1f2e';
     ctx.fillRect(w.x, w.y, w.w, w.h);
-    ctx.fillStyle = COLORS.wallTop;
-    ctx.fillRect(w.x, w.y, w.w, 5);
+    // Brass trim along the top edge, catching the lamplight.
+    ctx.fillStyle = '#7a5c2e';
+    ctx.fillRect(w.x, w.y, w.w, 4);
+    ctx.fillStyle = 'rgba(255,200,110,0.25)';
+    ctx.fillRect(w.x, w.y, w.w, 1.5);
   }
   for (const c of COVER) {
-    ctx.fillStyle = '#2c3550';
+    // Dark walnut case, brass edge, warm glass glint — furniture, no label.
+    ctx.fillStyle = '#241a16';
     roundRect(ctx, c.x, c.y, c.w, c.h, 6);
     ctx.fill();
-    ctx.strokeStyle = '#4a5878';
+    ctx.strokeStyle = '#8a6a2a';
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = 'rgba(244,239,228,0.55)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(c.label.toUpperCase(), c.x + c.w / 2, c.y + c.h / 2 + 3);
+    ctx.strokeStyle = 'rgba(255,205,120,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(c.x + 10, c.y + c.h - 8);
+    ctx.lineTo(c.x + c.w - 26, c.y + 8);
+    ctx.stroke();
   }
   for (const p of PILLARS) {
-    ctx.fillStyle = '#3a4260';
+    ctx.fillStyle = '#241c2b';
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#565f86';
+    ctx.fillStyle = '#332740';
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r - 8, 0, Math.PI * 2);
     ctx.fill();
+    // Warm rim on the lamp side of the pillar.
+    ctx.strokeStyle = 'rgba(255,190,100,0.45)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r - 2, -2.4, -0.6);
+    ctx.stroke();
   }
+}
+
+// A warm halo behind something precious, so it glints at a glance.
+function halo(ctx, x, y, radius, alpha) {
+  const g = ctx.createRadialGradient(x, y, 4, x, y, radius);
+  g.addColorStop(0, `rgba(255,196,90,${alpha})`);
+  g.addColorStop(1, 'rgba(255,196,90,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawLoot(ctx, state) {
@@ -100,57 +180,71 @@ function drawLoot(ctx, state) {
     if (item.taken) continue;
     const pulse = 0.55 + 0.25 * Math.sin(state.time * 3 + item.x);
     if (item.kind === 'painting') {
+      halo(ctx, item.x, item.y, 70, 0.30 * pulse + 0.12);
       ctx.save();
       ctx.translate(item.x, item.y);
-      ctx.fillStyle = '#6b4f1d';
+      // Gilt frame, canvas, a warm sun in the painting itself.
+      ctx.fillStyle = '#a8842f';
+      ctx.fillRect(-37, -27, 74, 54);
+      ctx.fillStyle = '#7a5c1e';
       ctx.fillRect(-34, -24, 68, 48);
-      ctx.fillStyle = '#274b63';
+      ctx.fillStyle = '#2c4a5e';
       ctx.fillRect(-28, -18, 56, 36);
-      ctx.fillStyle = '#e8c96a';
+      ctx.fillStyle = '#f2c14e';
       ctx.beginPath();
       ctx.arc(-6, -4, 9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#7fb3d5';
+      ctx.fillStyle = '#e8b34a';
       ctx.fillRect(-28, 8, 56, 10);
       ctx.restore();
       ctx.fillStyle = `rgba(242,193,78,${pulse})`;
-      ctx.font = 'bold 11px sans-serif';
+      ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`$${item.value}`, item.x, item.y + 42);
+      ctx.fillText(`$${item.value}`, item.x, item.y + 44);
     } else if (item.kind === 'gems') {
+      halo(ctx, item.x, item.y, 80, 0.30 * pulse + 0.12);
       ctx.save();
       ctx.translate(item.x, item.y);
-      ctx.shadowColor = '#7fe7ff';
-      ctx.shadowBlur = 18;
-      ctx.fillStyle = '#7fe7ff';
+      ctx.shadowColor = '#8fe9ff';
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = '#aef2ff';
       ctx.beginPath();
-      ctx.moveTo(0, -18);
-      ctx.lineTo(14, 0);
-      ctx.lineTo(0, 18);
-      ctx.lineTo(-14, 0);
+      ctx.moveTo(0, -20);
+      ctx.lineTo(15, 0);
+      ctx.lineTo(0, 20);
+      ctx.lineTo(-15, 0);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
-      ctx.fillStyle = `rgba(127,231,255,${pulse})`;
+      ctx.fillStyle = '#c8f4ff';
+      ctx.beginPath();
+      ctx.arc(item.x - 5, item.y - 7, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(174,242,255,${pulse})`;
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`GEMS $${item.value}`, item.x, item.y + 36);
+      ctx.fillText(`GEMS $${item.value}`, item.x, item.y + 38);
     } else if (item.kind === 'vault') {
+      halo(ctx, item.x, item.y, 110, 0.28 * pulse + 0.10);
       ctx.save();
       ctx.translate(item.x, item.y);
-      ctx.fillStyle = '#20263f';
+      ctx.fillStyle = '#1d1508';
       roundRect(ctx, -46, -40, 92, 80, 8);
       ctx.fill();
       ctx.strokeStyle = COLORS.gold;
       ctx.lineWidth = 3;
       ctx.stroke();
+      ctx.fillStyle = '#8a6a2a';
+      ctx.beginPath();
+      ctx.arc(0, 0, 17, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = COLORS.gold;
       ctx.beginPath();
-      ctx.arc(0, 0, 16, 0, Math.PI * 2);
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#20263f';
+      ctx.fillStyle = '#1d1508';
       ctx.beginPath();
-      ctx.arc(0, 0, 8, 0, Math.PI * 2);
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       ctx.fillStyle = COLORS.gold;
@@ -178,9 +272,10 @@ function drawLoot(ctx, state) {
 
 function drawExit(ctx, state) {
   const open = exitOpen(state);
+  if (open) halo(ctx, EXIT.x + EXIT.w / 2, EXIT.y + EXIT.h / 2, 90, 0.30);
   ctx.save();
   ctx.translate(EXIT.x + EXIT.w / 2, EXIT.y + EXIT.h / 2);
-  ctx.fillStyle = open ? '#123524' : '#241a1a';
+  ctx.fillStyle = open ? '#0e2b1a' : '#1d1214';
   roundRect(ctx, -EXIT.w / 2, -EXIT.h / 2, EXIT.w, EXIT.h, 8);
   ctx.fill();
   ctx.strokeStyle = open ? COLORS.safe : '#6b4a4a';
@@ -191,27 +286,39 @@ function drawExit(ctx, state) {
   ctx.textAlign = 'center';
   ctx.fillText(open ? 'EXIT — GO!' : 'EXIT · NEED $1,000', 0, 6);
   ctx.restore();
-  // The vent the thief slipped in through.
-  ctx.fillStyle = '#151a2e';
+  // The vent the thief slipped in through, a dark grate low on the wall.
+  ctx.fillStyle = '#0c0a12';
   ctx.fillRect(ENTRANCE.x, ENTRANCE.y, ENTRANCE.w, ENTRANCE.h);
-  ctx.strokeStyle = '#4a5878';
+  ctx.strokeStyle = '#5c4a26';
   ctx.lineWidth = 2;
   ctx.strokeRect(ENTRANCE.x, ENTRANCE.y, ENTRANCE.w, ENTRANCE.h);
-  ctx.fillStyle = '#9aa3c0';
-  ctx.font = 'bold 10px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('VENT IN', ENTRANCE.x + ENTRANCE.w / 2, ENTRANCE.y + ENTRANCE.h / 2 + 3);
+  ctx.strokeStyle = 'rgba(92,74,38,0.7)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i += 1) {
+    ctx.beginPath();
+    ctx.moveTo(ENTRANCE.x + 6, ENTRANCE.y + i * 14);
+    ctx.lineTo(ENTRANCE.x + ENTRANCE.w - 6, ENTRANCE.y + i * 14);
+    ctx.stroke();
+  }
 }
 
+// Vision cones, two layers: a soft wash plus a hotter core, so the sweep
+// reads as danger even shrunk to a thumbnail. Guards are red, cameras amber.
 function drawCones(ctx, state) {
   for (const cam of state.cameras) {
     if (state.time < cam.disabledUntil) continue;
-    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range, CAMERA.halfAngle, COLORS.cameraCone);
+    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range, CAMERA.halfAngle, 'rgba(255,186,64,0.16)');
+    drawCone(ctx, cam.x, cam.y, cam.angle, CAMERA.range * 0.8, CAMERA.halfAngle * 0.7, 'rgba(255,196,90,0.20)');
   }
   for (const g of state.guards) {
     const hot = g.alert > 0.3;
-    const fill = hot ? 'rgba(229,72,77,0.42)' : COLORS.dangerSoft;
-    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange, GUARD.coneHalfAngle, fill);
+    const investigating = !!g.investigate;
+    const outer = investigating ? 'rgba(242,163,60,0.24)'
+      : hot ? 'rgba(229,72,77,0.26)' : 'rgba(229,72,77,0.18)';
+    const inner = investigating ? 'rgba(242,163,60,0.30)'
+      : hot ? 'rgba(229,72,77,0.34)' : 'rgba(229,72,77,0.24)';
+    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange, GUARD.coneHalfAngle, outer);
+    drawCone(ctx, g.x, g.y, g.facing, GUARD.coneRange * 0.8, GUARD.coneHalfAngle * 0.65, inner);
   }
 }
 
@@ -220,34 +327,49 @@ function drawCameras(ctx, state) {
     const disabled = state.time < cam.disabledUntil;
     ctx.save();
     ctx.translate(cam.x, cam.y);
-    ctx.fillStyle = disabled ? '#3a3f55' : '#c9a227';
+    // Brass housing, amber lens when live.
+    ctx.fillStyle = disabled ? '#3a3f55' : '#8a6a2a';
     ctx.beginPath();
-    ctx.arc(0, 0, 10, 0, Math.PI * 2);
+    ctx.arc(0, 0, 11, 0, Math.PI * 2);
     ctx.fill();
-    ctx.rotate(cam.angle);
     ctx.fillStyle = disabled ? '#555b73' : '#e8c96a';
+    ctx.rotate(cam.angle);
     ctx.fillRect(0, -4, 20, 8);
+    ctx.fillStyle = disabled ? '#555b73' : '#ff5a4d';
+    ctx.beginPath();
+    ctx.arc(20, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
     ctx.fillStyle = disabled ? '#8a90a8' : '#f4efe4';
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(disabled ? 'CAM OFF' : cam.label, Math.max(30, Math.min(1250, cam.x)), cam.y + 26);
+    ctx.fillText(disabled ? 'CAM OFF' : cam.label, Math.max(30, Math.min(1250, cam.x)), cam.y + 28);
   }
 }
 
 function drawGuards(ctx, state) {
   for (const g of state.guards) {
+    // Each guard carries a lantern: a small warm pool that marks him in the dark.
+    const lg = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, 46);
+    lg.addColorStop(0, 'rgba(255,178,72,0.20)');
+    lg.addColorStop(1, 'rgba(255,178,72,0)');
+    ctx.fillStyle = lg;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, 46, 0, Math.PI * 2);
+    ctx.fill();
     ctx.save();
     ctx.translate(g.x, g.y);
-    // Body: navy uniform, cap brim points where the guard faces.
-    ctx.fillStyle = '#2b3a67';
+    // Body: dark uniform with a gold cap band; brim points where he faces.
+    ctx.fillStyle = '#232c4e';
     ctx.beginPath();
     ctx.arc(0, 0, GUARD.radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = g.alert > 0.3 ? COLORS.danger : '#7c8bc4';
+    ctx.strokeStyle = g.alert > 0.3 ? COLORS.danger : g.investigate ? '#f2a33c' : '#8a94c4';
     ctx.lineWidth = 2.5;
     ctx.stroke();
     ctx.rotate(g.facing);
+    ctx.fillStyle = '#e8c96a';
+    ctx.fillRect(-GUARD.radius + 2, -3, 6, 6);
     ctx.fillStyle = '#dfe6ff';
     ctx.beginPath();
     ctx.moveTo(GUARD.radius + 8, 0);
@@ -261,40 +383,70 @@ function drawGuards(ctx, state) {
       ctx.font = 'bold 18px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('!', g.x, g.y - GUARD.radius - 8);
+    } else if (g.investigate) {
+      ctx.fillStyle = '#f2a33c';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('?', g.x, g.y - GUARD.radius - 8);
     }
   }
 }
 
 function drawThief(ctx, state) {
   const t = state.thief;
+  const hidden = inShadow(t.x, t.y);
   ctx.save();
   ctx.translate(t.x, t.y);
-  // Hooded cloak: dark teal, gold clasp, a pale face in the dark.
-  ctx.fillStyle = '#123f38';
+  // In lamplight the cloak is teal with a pale face and a gold clasp; in
+  // shadow the whole figure sinks to near-black — the light says "hidden".
+  ctx.fillStyle = hidden ? '#0a0f14' : '#123f38';
   ctx.beginPath();
   ctx.moveTo(0, -15);
   ctx.lineTo(12, 10);
   ctx.lineTo(-12, 10);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = '#1f7a6d';
+  ctx.strokeStyle = hidden ? '#1c2b33' : '#1f7a6d';
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.fillStyle = '#f4efe4';
+  ctx.fillStyle = hidden ? '#3a4550' : '#f4efe4';
   ctx.beginPath();
   ctx.arc(0, -4, 6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = COLORS.gold;
-  ctx.beginPath();
-  ctx.arc(0, 8, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  if (inShadow(t.x, t.y)) {
-    ctx.fillStyle = 'rgba(57,217,138,0.9)';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('HIDDEN', t.x, t.y - 22);
+  if (!hidden) {
+    ctx.fillStyle = COLORS.gold;
+    ctx.beginPath();
+    ctx.arc(0, 8, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
+  ctx.restore();
+}
+
+// The tossed coin: a gold disc and the noise rings that pulled a guard over.
+function drawCoin(ctx, state) {
+  if (!state.coin) return;
+  const c = state.coin;
+  const age = state.time - c.landedAt;
+  const ringR = 14 + Math.min(1, age / 0.7) * 52;
+  const ringAlpha = Math.max(0, 0.75 - age * 0.14);
+  ctx.strokeStyle = `rgba(242,193,78,${ringAlpha})`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(242,193,78,${ringAlpha * 0.5})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, ringR * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#f2c14e';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8a6a2a';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 2.5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawSmoke(ctx, state) {
@@ -302,11 +454,11 @@ function drawSmoke(ctx, state) {
   const s = state.smoke;
   const left = Math.max(0, s.until - state.time);
   const alpha = Math.min(0.75, left / 2);
-  ctx.fillStyle = `rgba(180,190,210,${alpha})`;
+  ctx.fillStyle = `rgba(190,185,175,${alpha})`;
   ctx.beginPath();
   ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(180,190,210,0.5)';
+  ctx.fillStyle = 'rgba(190,185,175,0.5)';
   ctx.beginPath();
   ctx.arc(s.x - 40, s.y + 20, s.radius * 0.5, 0, Math.PI * 2);
   ctx.arc(s.x + 45, s.y - 15, s.radius * 0.45, 0, Math.PI * 2);
@@ -314,7 +466,7 @@ function drawSmoke(ctx, state) {
 }
 
 function drawHud(ctx, state) {
-  ctx.fillStyle = COLORS.hud;
+  ctx.fillStyle = '#0d0a14';
   ctx.fillRect(0, 0, VIEW.width, HUD_H);
   ctx.fillStyle = COLORS.gold;
   ctx.font = 'bold 22px sans-serif';
@@ -330,7 +482,7 @@ function drawHud(ctx, state) {
   ctx.textAlign = 'left';
   const lootText = `LOOT $${state.lootValue.toLocaleString()} / $${LOOT_TARGET.toLocaleString()}`;
   ctx.fillText(lootText, 430, 28);
-  ctx.fillStyle = '#2a3350';
+  ctx.fillStyle = '#2a2438';
   ctx.fillRect(430, 36, 260, 10);
   ctx.fillStyle = COLORS.gold;
   ctx.fillRect(430, 36, 260 * Math.min(1, state.lootValue / LOOT_TARGET), 10);
@@ -340,7 +492,7 @@ function drawHud(ctx, state) {
   ctx.fillStyle = state.alarm > 60 ? COLORS.danger : COLORS.text;
   ctx.font = 'bold 20px sans-serif';
   ctx.fillText('ALARM', ax, 28);
-  ctx.fillStyle = '#2a3350';
+  ctx.fillStyle = '#2a2438';
   ctx.fillRect(ax, 36, 200, 10);
   const alarmColor = state.alarm > 60 ? COLORS.danger : state.alarm > 30 ? '#f2a33c' : COLORS.safe;
   ctx.fillStyle = alarmColor;
@@ -357,9 +509,11 @@ function drawHud(ctx, state) {
   ctx.textAlign = 'left';
   const sel = state.tools.selected;
   ctx.fillStyle = sel === 'smoke' ? COLORS.gold : COLORS.muted;
-  ctx.fillText(`[1] SMOKE ×${state.tools.smoke}`, 990, 28);
+  ctx.fillText(`[1] SMOKE ×${state.tools.smoke}`, 990, 20);
   ctx.fillStyle = sel === 'emp' ? COLORS.gold : COLORS.muted;
-  ctx.fillText(`[2] EMP ×${state.tools.emp}`, 990, 50);
+  ctx.fillText(`[2] EMP ×${state.tools.emp}`, 990, 38);
+  ctx.fillStyle = sel === 'coin' ? COLORS.gold : COLORS.muted;
+  ctx.fillText(`[3] COIN ×${state.tools.coin}`, 990, 56);
 
   // Timer.
   const mins = Math.floor(state.timeLeft / 60);
@@ -380,7 +534,7 @@ function drawToast(ctx, state) {
   ctx.font = 'bold 16px sans-serif';
   const w = ctx.measureText(state.message).width + 28;
   const x = (VIEW.width - w) / 2;
-  ctx.fillStyle = 'rgba(13,16,32,0.88)';
+  ctx.fillStyle = 'rgba(13,10,20,0.88)';
   roundRect(ctx, x, HUD_H + 12, w, 34, 8);
   ctx.fill();
   ctx.strokeStyle = COLORS.gold;
@@ -392,8 +546,18 @@ function drawToast(ctx, state) {
   ctx.restore();
 }
 
+// A faint vignette over the room only, so the eye sits in the middle of the
+// gallery. Subtle: loot near the edges must stay legible.
+function drawVignette(ctx) {
+  const g = ctx.createRadialGradient(640, 392, 300, 640, 392, 780);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.22)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, HUD_H, VIEW.width, VIEW.height - HUD_H);
+}
+
 function drawOverlay(ctx, title, lines, accent) {
-  ctx.fillStyle = 'rgba(8,10,24,0.78)';
+  ctx.fillStyle = 'rgba(8,6,16,0.78)';
   ctx.fillRect(0, 0, VIEW.width, VIEW.height);
   ctx.fillStyle = accent;
   ctx.font = 'bold 54px sans-serif';
@@ -406,6 +570,7 @@ function drawOverlay(ctx, title, lines, accent) {
 
 export function render(ctx, state) {
   drawFloor(ctx);
+  drawLampPools(ctx);
   drawShadows(ctx);
   drawWallsAndCover(ctx);
   drawExit(ctx, state);
@@ -415,17 +580,20 @@ export function render(ctx, state) {
     drawCameras(ctx, state);
     drawGuards(ctx, state);
     drawThief(ctx, state);
+    drawCoin(ctx, state);
     drawSmoke(ctx, state);
   }
+  drawVignette(ctx);
   drawHud(ctx, state);
   drawToast(ctx, state);
 
   if (state.screen === SCREEN_TITLE) {
     drawOverlay(ctx, 'THE MIDNIGHT VAULT', [
       'One gallery. Three guards. Two cameras. One vault.',
-      'WASD / arrows to move · 1 / 2 pick a tool · SPACE uses it',
+      'WASD / arrows to move · 1 / 2 / 3 pick a tool · SPACE uses it',
+      '3 tosses a coin — the clink pulls the nearest guard off patrol.',
       'Grab $1,000 of loot, then slip out the exit before dawn.',
-      'Cones are danger. Shadows are safety. Smoke buys you seconds.',
+      'Warm lamplight is danger. Deep shadow is safety. Smoke buys seconds.',
       '',
       'Press ENTER or click to begin the heist',
     ], COLORS.gold);

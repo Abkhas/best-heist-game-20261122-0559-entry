@@ -14,7 +14,8 @@ export function makeGuards() {
     facing: 0,            // radians; follows movement, sweeps while paused
     pause: 0,             // seconds left paused at a waypoint
     sweepT: 0,            // sweep clock while paused
-    alert: 0,             // 0..1, how hot this guard is (drives cone colour)
+    alert: 0,            // 0..1, how hot this guard is (drives cone colour)
+    investigate: null,   // { x, y, until } while a tossed coin holds his attention
   }));
 }
 
@@ -38,8 +39,44 @@ function angleDiff(a, b) {
   return d;
 }
 
-/** Walk one guard along its patrol. At each waypoint it stops and looks around. */
-export function updateGuard(g, dt) {
+/** Walk toward (tx, ty) at guard speed. Returns true on arrival. */
+function walkToward(g, tx, ty, dt) {
+  const dx = tx - g.x;
+  const dy = ty - g.y;
+  const dist = Math.hypot(dx, dy);
+  const step = g.speed * dt;
+  if (dist <= step) {
+    g.x = tx;
+    g.y = ty;
+    g.facing = Math.atan2(dy, dx);
+    return true;
+  }
+  g.x += (dx / dist) * step;
+  g.y += (dy / dist) * step;
+  g.facing = Math.atan2(dy, dx);
+  return false;
+}
+
+/**
+ * Walk one guard along its patrol. At each waypoint it stops and looks around.
+ * A guard with an investigate target walks off patrol to look at the noise
+ * instead, then resumes his beat.
+ */
+export function updateGuard(g, dt, state) {
+  if (g.investigate) {
+    if (state && state.time > g.investigate.until) {
+      g.investigate = null;
+    } else {
+      const arrived = walkToward(g, g.investigate.x, g.investigate.y, dt);
+      if (arrived) {
+        g.investigate = null;
+        g.pause = 0.8; // look around at the spot where the coin clinked
+        g.sweepT = 0;
+        g.baseFacing = g.facing;
+      }
+      return;
+    }
+  }
   if (g.pause > 0) {
     g.pause -= dt;
     g.sweepT += dt;
@@ -51,22 +88,11 @@ export function updateGuard(g, dt) {
     return;
   }
   const [tx, ty] = g.waypoints[g.target];
-  const dx = tx - g.x;
-  const dy = ty - g.y;
-  const dist = Math.hypot(dx, dy);
-  const step = g.speed * dt;
-  if (dist <= step) {
-    g.x = tx;
-    g.y = ty;
+  if (walkToward(g, tx, ty, dt)) {
     g.pause = GUARD.pauseSeconds;
     g.sweepT = 0;
-    g.baseFacing = Math.atan2(dy, dx);
-    g.facing = g.baseFacing;
-    return;
+    g.baseFacing = g.facing;
   }
-  g.x += (dx / dist) * step;
-  g.y += (dy / dist) * step;
-  g.facing = Math.atan2(dy, dx);
 }
 
 /** Sweep one camera's cone back and forth around its mount angle. */

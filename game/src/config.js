@@ -40,6 +40,15 @@ export const ALARM = {
 export const TOOLS = {
   smoke: { count: 3, radius: 95, seconds: 6, key: '1', label: 'SMOKE' },
   emp: { count: 2, seconds: 9, key: '2', label: 'EMP' },
+  coin: { count: 3, key: '3', label: 'COIN' },
+};
+
+// A tossed coin: how far it flies, how far away a guard hears the clink,
+// and how long the nearest guard walks over to look at it.
+export const COIN = {
+  throwDistance: 120,
+  investigateRadius: 420,
+  investigateSeconds: 6,
 };
 
 export const VAULT_CHANNEL_SECONDS = 3;

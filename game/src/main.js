@@ -49,6 +49,7 @@ const input = createInput((action) => {
   }
   if (action === 'tool-smoke') state.tools.selected = 'smoke';
   if (action === 'tool-emp') state.tools.selected = 'emp';
+  if (action === 'tool-coin') state.tools.selected = 'coin';
 });
 
 const params = new URLSearchParams(window.location.search);
